@@ -1,28 +1,41 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Shield, Trophy, Users } from "lucide-react"
-import { getTeams, getPlayers } from "@/lib/data-service"
-import DataStatus from "@/components/data-status"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Shield, Trophy, Users } from "lucide-react";
+import { getTeams, getPlayers } from "@/lib/data-service";
+import DataStatus from "@/components/data-status";
 
 export default async function LeaderboardsPage() {
   // Fetch teams and players from Supabase
-  const teams = await getTeams()
-  const players = await getPlayers()
+  const teams = await getTeams();
+  const players = await getPlayers();
 
   // Sort teams by points (descending)
-  const sortedTeams = [...teams].sort((a, b) => b.stats.points - a.stats.points)
+  const sortedTeams = [...teams].sort(
+    (a, b) => (b.team_stats?.points || 0) - (a.team_stats?.points || 0)
+  );
 
   // Sort players by impact score (descending)
-  const sortedPlayers = [...players].sort((a, b) => b.stats.impact - a.stats.impact)
+  const sortedPlayers = [...players].sort(
+    (a, b) => (b.player_stats?.impact || 0) - (a.player_stats?.impact || 0)
+  );
 
   return (
     <div className="container py-10">
       <div className="flex flex-col items-start gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Leaderboards</h1>
-          <p className="text-muted-foreground">View team and player rankings for the JK2 CTF Tournament.</p>
+          <p className="text-muted-foreground">
+            View team and player rankings for the JK2 CTF Tournament.
+          </p>
         </div>
         <DataStatus />
       </div>
@@ -79,14 +92,30 @@ export default async function LeaderboardsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">{team.stats.matchesPlayed}</TableCell>
-                    <TableCell className="text-right">{team.stats.matchesWon}</TableCell>
-                    <TableCell className="text-right">{team.stats.matchesDrawn}</TableCell>
-                    <TableCell className="text-right">{team.stats.matchesLost}</TableCell>
-                    <TableCell className="text-right">{team.stats.captures}</TableCell>
-                    <TableCell className="text-right">{team.stats.flagReturns}</TableCell>
-                    <TableCell className="text-right">{team.stats.kills}</TableCell>
-                    <TableCell className="text-right font-medium">{team.stats.points}</TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.matches_played || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.matches_won || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.matches_drawn || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.matches_lost || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.captures || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.flag_returns || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {team.team_stats?.kills || 0}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {team.team_stats?.points || 0}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -125,11 +154,19 @@ export default async function LeaderboardsPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback>{player.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                          <AvatarFallback>
+                            {(player.name || "NN")
+                              .substring(0, 2)
+                              .toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col">
-                          <div className="font-medium">{player.name}</div>
-                          <div className="text-xs text-muted-foreground">{player.team}</div>
+                          <div className="font-medium">
+                            {player.name || "Unknown Player"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {player.team_name || "N/A"}
+                          </div>
                         </div>
                         {index === 0 && (
                           <Badge variant="secondary" className="ml-2">
@@ -138,13 +175,27 @@ export default async function LeaderboardsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-medium text-jkhub">{player.stats.impact}</TableCell>
-                    <TableCell className="text-right">{player.stats.flagCaptures}</TableCell>
-                    <TableCell className="text-right">{player.stats.flagReturns}</TableCell>
-                    <TableCell className="text-right">{player.stats.bcKills}</TableCell>
-                    <TableCell className="text-right">{player.stats.overallKills}</TableCell>
-                    <TableCell className="text-right">{player.stats.overallDeaths}</TableCell>
-                    <TableCell className="text-right">{player.stats.flagholdTime}s</TableCell>
+                    <TableCell className="text-right font-medium text-jkhub">
+                      {player.player_stats?.impact || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.player_stats?.flag_captures || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.player_stats?.flag_returns || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.player_stats?.bc_kills || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.player_stats?.overall_kills || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.player_stats?.overall_deaths || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {player.player_stats?.flaghold_time || 0}s
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -153,5 +204,5 @@ export default async function LeaderboardsPage() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

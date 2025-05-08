@@ -1,15 +1,26 @@
-import Link from "next/link"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getPlayers } from "@/lib/data-service"
+import Link from "next/link";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getPlayers } from "@/lib/data-service";
 
 export default async function TopPlayers() {
   // Fetch players from Supabase
-  const players = await getPlayers()
+  const players = await getPlayers();
 
   // Sort players by impact score (descending)
-  const topPlayers = [...players].sort((a, b) => b.stats.impact - a.stats.impact).slice(0, 5)
+  const topPlayers = [...players]
+    .sort(
+      (a, b) => (b.player_stats?.impact || 0) - (a.player_stats?.impact || 0)
+    )
+    .slice(0, 5);
 
   return (
     <div className="overflow-auto">
@@ -32,19 +43,32 @@ export default async function TopPlayers() {
               <TableCell>
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback>{player.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback>
+                      {(player.name || "NN").substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
-                  <div className="font-medium">{player.name}</div>
+                  <div className="font-medium">
+                    {player.name || "Unknown Player"}
+                  </div>
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{player.team}</Badge>
+                <Badge variant="outline">{player.team_name || "N/A"}</Badge>
               </TableCell>
-              <TableCell className="text-right font-medium text-jkhub">{player.stats.impact}</TableCell>
-              <TableCell className="text-right">{player.stats.flagCaptures}</TableCell>
-              <TableCell className="text-right">{player.stats.overallKills}</TableCell>
+              <TableCell className="text-right font-medium text-jkhub">
+                {player.player_stats?.impact || 0}
+              </TableCell>
               <TableCell className="text-right">
-                <Link href={`/players/${player.id}`} className="text-sm text-jkhub hover:underline">
+                {player.player_stats?.flag_captures || 0}
+              </TableCell>
+              <TableCell className="text-right">
+                {player.player_stats?.overall_kills || 0}
+              </TableCell>
+              <TableCell className="text-right">
+                <Link
+                  href={`/players/${player.id}`}
+                  className="text-sm text-jkhub hover:underline"
+                >
                   View profile
                 </Link>
               </TableCell>
@@ -58,5 +82,5 @@ export default async function TopPlayers() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

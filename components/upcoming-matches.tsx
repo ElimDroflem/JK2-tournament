@@ -1,13 +1,13 @@
-import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { CalendarIcon, Clock } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { getUpcomingMatches } from "@/lib/data-service"
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CalendarIcon, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getUpcomingMatches } from "@/lib/data-service";
 
 export default async function UpcomingMatches() {
   // Fetch upcoming matches from Supabase
-  const upcomingMatches = await getUpcomingMatches()
+  const upcomingMatches = await getUpcomingMatches();
 
   return (
     <div className="space-y-4">
@@ -24,15 +24,17 @@ export default async function UpcomingMatches() {
                         "capitalize",
                         match.round.toLowerCase().includes("final")
                           ? "bg-jkhub/10 text-jkhub border-jkhub"
-                          : "border-jkhub/50 text-gray-300",
+                          : "border-jkhub/50 text-gray-300"
                       )}
                     >
                       {match.round}
                     </Badge>
-                    <span className="text-sm text-muted-foreground">Match #{match.id}</span>
+                    <span className="text-sm text-muted-foreground">
+                      Match #{match.id}
+                    </span>
                   </div>
                   <div className="font-semibold">
-                    {match.teamA} vs {match.teamB}
+                    {match.team_a_name} vs {match.team_b_name}
                   </div>
                   <div className="flex items-center text-sm text-muted-foreground">
                     <CalendarIcon className="mr-1 h-3 w-3" />
@@ -52,5 +54,5 @@ export default async function UpcomingMatches() {
         </Link>
       </div>
     </div>
-  )
+  );
 }

@@ -1,13 +1,20 @@
-import Link from "next/link"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { CalendarIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { getMatchHistory } from "@/lib/data-service"
+import Link from "next/link";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getMatchHistory } from "@/lib/data-service";
 
 export default async function RecentMatches() {
   // Fetch match history from Supabase
-  const matchHistory = await getMatchHistory()
+  const matchHistory = await getMatchHistory();
 
   return (
     <div className="overflow-auto">
@@ -32,7 +39,7 @@ export default async function RecentMatches() {
                       "capitalize",
                       match.round.toLowerCase().includes("final")
                         ? "bg-jkhub/10 text-jkhub border-jkhub"
-                        : "border-jkhub/50",
+                        : "border-jkhub/50"
                     )}
                   >
                     {match.round}
@@ -41,12 +48,12 @@ export default async function RecentMatches() {
               </TableCell>
               <TableCell>
                 <div className="font-medium">
-                  {match.teamA} vs {match.teamB}
+                  {match.team_a_name || "N/A"} vs {match.team_b_name || "N/A"}
                 </div>
               </TableCell>
               <TableCell>
                 <div className="font-medium">
-                  {match.scoreA} - {match.scoreB}
+                  {match.score_a ?? 0} - {match.score_b ?? 0}
                 </div>
               </TableCell>
               <TableCell>
@@ -56,7 +63,10 @@ export default async function RecentMatches() {
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                <Link href={`/matches/${match.id}`} className="text-sm text-jkhub hover:underline">
+                <Link
+                  href={`/matches/${match.id}`}
+                  className="text-sm text-jkhub hover:underline"
+                >
                   View details
                 </Link>
               </TableCell>
@@ -70,5 +80,5 @@ export default async function RecentMatches() {
         </Link>
       </div>
     </div>
-  )
+  );
 }
