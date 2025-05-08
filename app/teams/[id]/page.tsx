@@ -1,37 +1,63 @@
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Shield, Swords, Trophy, Users } from "lucide-react"
-import { getTeamById, getPlayers, getMatchHistory, getUpcomingMatches } from "@/lib/data-service"
-import TeamDetailCard from "@/components/team-detail-card"
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Shield, Swords, Trophy, Users } from "lucide-react";
+import {
+  getTeamById,
+  getPlayers,
+  getMatchHistory,
+  getUpcomingMatches,
+  TeamWithStatsAndPlayers,
+  PlayerWithStatsAndTeamName,
+  MatchWithTeamNames,
+} from "@/lib/data-service";
+import TeamDetailCard from "@/components/team-detail-card";
 
 export default async function TeamPage({ params }: { params: { id: string } }) {
-  const teamId = Number.parseInt(params.id)
-  const team = await getTeamById(teamId)
+  const teamId = Number.parseInt(params.id);
+  if (isNaN(teamId)) {
+    notFound();
+  }
+  const team: TeamWithStatsAndPlayers | null = await getTeamById(teamId);
 
   if (!team) {
-    notFound()
+    notFound();
   }
 
   // Get all players
-  const allPlayers = await getPlayers()
+  const allPlayers: PlayerWithStatsAndTeamName[] = await getPlayers();
 
-  // Get team players
-  const teamPlayers = allPlayers.filter((player) => player.team === team.name)
+  // Get team players by ID
+  const teamPlayers = allPlayers.filter((player) => player.team_id === team.id);
 
-  // Get team matches
-  const allMatches = await getMatchHistory()
-  const teamMatchHistory = allMatches.filter((match) => match.teamA === team.name || match.teamB === team.name)
+  // Get team matches by ID
+  const allMatches: MatchWithTeamNames[] = await getMatchHistory();
+  const teamMatchHistory = allMatches.filter(
+    (match) => match.team_a_id === team.id || match.team_b_id === team.id
+  );
 
-  const allUpcomingMatches = await getUpcomingMatches()
+  const allUpcomingMatches: MatchWithTeamNames[] = await getUpcomingMatches();
   const teamUpcomingMatches = allUpcomingMatches.filter(
-    (match) => match.teamA === team.name || match.teamB === team.name,
-  )
+    (match) => match.team_a_id === team.id || match.team_b_id === team.id
+  );
 
   return (
     <div className="container py-10">
@@ -44,8 +70,8 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                   team.name.includes("Force") || team.name.includes("Jedi")
                     ? "bg-jedi/20"
                     : team.name.includes("Sith")
-                      ? "bg-sith/20"
-                      : "bg-imperial/20"
+                    ? "bg-sith/20"
+                    : "bg-imperial/20"
                 }`}
               >
                 <Shield
@@ -53,13 +79,15 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                     team.name.includes("Force") || team.name.includes("Jedi")
                       ? "text-jedi"
                       : team.name.includes("Sith")
-                        ? "text-sith"
-                        : "text-bespin"
+                      ? "text-sith"
+                      : "text-bespin"
                   }`}
                 />
               </div>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">{team.name}</h1>
+                <h1 className="text-3xl font-bold tracking-tight">
+                  {team.name}
+                </h1>
                 <p className="text-muted-foreground">Founded: {team.founded}</p>
               </div>
             </div>
@@ -78,10 +106,14 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           <div className="grid gap-6 md:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Matches Played</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Matches Played
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{team.stats.matchesPlayed}</div>
+                <div className="text-2xl font-bold">
+                  {team.team_stats?.matches_played || 0}
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -89,23 +121,33 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                 <CardTitle className="text-sm font-medium">Wins</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{team.stats.matchesWon}</div>
+                <div className="text-2xl font-bold">
+                  {team.team_stats?.matches_won || 0}
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Flag Captures</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Flag Captures
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{team.stats.captures}</div>
+                <div className="text-2xl font-bold">
+                  {team.team_stats?.captures || 0}
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Tournament Points</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Tournament Points
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{team.stats.points}</div>
+                <div className="text-2xl font-bold">
+                  {team.team_stats?.points || 0}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -129,7 +171,9 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
               <Card>
                 <CardHeader>
                   <CardTitle>Team Roster</CardTitle>
-                  <CardDescription>Players currently on {team.name}</CardDescription>
+                  <CardDescription>
+                    Players currently on {team.name}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -150,27 +194,46 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                               <Avatar className="h-8 w-8">
                                 <AvatarFallback
                                   className={`${
-                                    team.name.includes("Force") || team.name.includes("Jedi")
+                                    team.name.includes("Force") ||
+                                    team.name.includes("Jedi")
                                       ? "bg-jedi/20 text-jedi"
                                       : team.name.includes("Sith")
-                                        ? "bg-sith/20 text-sith"
-                                        : "bg-imperial/20 text-bespin"
+                                      ? "bg-sith/20 text-sith"
+                                      : "bg-imperial/20 text-bespin"
                                   }`}
                                 >
-                                  {player.name.substring(0, 2).toUpperCase()}
+                                  {(player.name || "NN")
+                                    .substring(0, 2)
+                                    .toUpperCase()}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex flex-col">
-                                <div className="font-medium">{player.name}</div>
-                                <div className="text-xs text-muted-foreground">Role: {player.role || "Player"}</div>
+                                <div className="font-medium">
+                                  {player.name || "Unknown Player"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Role: {player.role || "Player"}
+                                </div>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">{player.stats.flagCaptures}</TableCell>
-                          <TableCell className="text-right">{player.stats.flagReturns}</TableCell>
-                          <TableCell className="text-right">{player.stats.overallKills}</TableCell>
                           <TableCell className="text-right">
-                            {(player.stats.overallKills / Math.max(1, player.stats.overallDeaths)).toFixed(2)}
+                            {player.player_stats?.flag_captures || 0}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {player.player_stats?.flag_returns || 0}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {player.player_stats?.overall_kills || 0}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {(
+                              (player.player_stats?.overall_kills || 0) /
+                              Math.max(
+                                1,
+                                player.player_stats?.overall_deaths || 0
+                              )
+                            ).toFixed(2)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -183,12 +246,16 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
               <Card>
                 <CardHeader>
                   <CardTitle>Match History</CardTitle>
-                  <CardDescription>Past and upcoming matches for {team.name}</CardDescription>
+                  <CardDescription>
+                    Past and upcoming matches for {team.name}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
                     <div>
-                      <h3 className="text-lg font-medium mb-3">Upcoming Matches</h3>
+                      <h3 className="text-lg font-medium mb-3">
+                        Upcoming Matches
+                      </h3>
                       {teamUpcomingMatches.length > 0 ? (
                         <Table>
                           <TableHeader>
@@ -197,23 +264,44 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                               <TableHead>Opponent</TableHead>
                               <TableHead>Date</TableHead>
                               <TableHead>Time</TableHead>
+                              <TableHead className="text-right">
+                                Details
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {teamUpcomingMatches.map((match) => (
-                              <TableRow key={match.id}>
-                                <TableCell>
-                                  <Badge variant="outline">{match.round}</Badge>
-                                </TableCell>
-                                <TableCell>{match.teamA === team.name ? match.teamB : match.teamA}</TableCell>
-                                <TableCell>{match.date}</TableCell>
-                                <TableCell>{match.time}</TableCell>
-                              </TableRow>
-                            ))}
+                            {teamUpcomingMatches.map((match) => {
+                              const opponentName =
+                                match.team_a_id === team.id
+                                  ? match.team_b_name
+                                  : match.team_a_name;
+                              return (
+                                <TableRow key={match.id}>
+                                  <TableCell>
+                                    <Badge variant="outline">
+                                      {match.round}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>{opponentName || "N/A"}</TableCell>
+                                  <TableCell>{match.date}</TableCell>
+                                  <TableCell>{match.time || "TBD"}</TableCell>
+                                  <TableCell className="text-right">
+                                    <Link
+                                      href={`/matches/${match.id}`}
+                                      className="text-sm text-jkhub hover:underline"
+                                    >
+                                      View
+                                    </Link>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       ) : (
-                        <p className="text-muted-foreground">No upcoming matches scheduled.</p>
+                        <p className="text-muted-foreground">
+                          No upcoming matches scheduled.
+                        </p>
                       )}
                     </div>
                     <div>
@@ -226,49 +314,76 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                               <TableHead>Opponent</TableHead>
                               <TableHead>Result</TableHead>
                               <TableHead>Score</TableHead>
+                              <TableHead className="text-right">
+                                Details
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {teamMatchHistory.map((match) => {
-                              const isTeamA = match.teamA === team.name
-                              const opponent = isTeamA ? match.teamB : match.teamA
-                              const teamScore = isTeamA ? match.scoreA : match.scoreB
-                              const opponentScore = isTeamA ? match.scoreB : match.scoreA
+                              const isTeamA = match.team_a_id === team.id;
+                              const opponentName = isTeamA
+                                ? match.team_b_name
+                                : match.team_a_name;
+                              const teamScore = match.score_a ?? 0;
+                              const opponentScore = match.score_b ?? 0;
                               const result =
-                                teamScore > opponentScore ? "Win" : teamScore < opponentScore ? "Loss" : "Draw"
+                                teamScore > opponentScore
+                                  ? "Win"
+                                  : teamScore < opponentScore
+                                  ? "Loss"
+                                  : "Draw";
 
                               return (
                                 <TableRow key={match.id}>
                                   <TableCell>
-                                    <Badge variant="outline">{match.round}</Badge>
+                                    <Badge variant="outline">
+                                      {match.round}
+                                    </Badge>
                                   </TableCell>
-                                  <TableCell>{opponent}</TableCell>
+                                  <TableCell>{opponentName || "N/A"}</TableCell>
                                   <TableCell>
                                     <Badge
                                       variant={
-                                        result === "Win" ? "success" : result === "Loss" ? "destructive" : "outline"
+                                        result === "Win"
+                                          ? "outline"
+                                          : result === "Loss"
+                                          ? "destructive"
+                                          : "outline"
                                       }
                                       className={
                                         result === "Win"
-                                          ? "bg-green-500/10 text-green-500"
+                                          ? "bg-green-500/10 text-green-500 border-green-700"
                                           : result === "Loss"
-                                            ? "bg-red-500/10 text-red-500"
-                                            : ""
+                                          ? "bg-red-500/10 text-red-500"
+                                          : ""
                                       }
                                     >
                                       {result}
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
-                                    {teamScore} - {opponentScore}
+                                    {isTeamA
+                                      ? `${teamScore} - ${opponentScore}`
+                                      : `${opponentScore} - ${teamScore}`}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Link
+                                      href={`/matches/${match.id}`}
+                                      className="text-sm text-jkhub hover:underline"
+                                    >
+                                      View
+                                    </Link>
                                   </TableCell>
                                 </TableRow>
-                              )
+                              );
                             })}
                           </TableBody>
                         </Table>
                       ) : (
-                        <p className="text-muted-foreground">No match history available.</p>
+                        <p className="text-muted-foreground">
+                          No match history available.
+                        </p>
                       )}
                     </div>
                   </div>
@@ -279,7 +394,9 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
               <Card>
                 <CardHeader>
                   <CardTitle>Detailed Team Statistics</CardTitle>
-                  <CardDescription>Performance metrics for {team.name}</CardDescription>
+                  <CardDescription>
+                    Performance metrics for {team.name}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-6 sm:grid-cols-2">
@@ -287,20 +404,36 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                       <h3 className="text-lg font-medium">Match Statistics</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Matches Played</p>
-                          <p className="text-xl font-bold">{team.stats.matchesPlayed}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Matches Played
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.matches_played || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Matches Won</p>
-                          <p className="text-xl font-bold">{team.stats.matchesWon}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Matches Won
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.matches_won || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Matches Drawn</p>
-                          <p className="text-xl font-bold">{team.stats.matchesDrawn}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Matches Drawn
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.matches_drawn || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Matches Lost</p>
-                          <p className="text-xl font-bold">{team.stats.matchesLost}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Matches Lost
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.matches_lost || 0}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -308,20 +441,36 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                       <h3 className="text-lg font-medium">Flag Statistics</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Flag Captures</p>
-                          <p className="text-xl font-bold">{team.stats.captures}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Flag Captures
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.captures || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Flag Returns</p>
-                          <p className="text-xl font-bold">{team.stats.flagReturns}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Flag Returns
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.flag_returns || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Total Kills</p>
-                          <p className="text-xl font-bold">{team.stats.kills}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Total Kills
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.kills || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Tournament Points</p>
-                          <p className="text-xl font-bold">{team.stats.points}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Tournament Points
+                          </p>
+                          <p className="text-xl font-bold">
+                            {team.team_stats?.points || 0}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -333,5 +482,5 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         </div>
       </div>
     </div>
-  )
+  );
 }

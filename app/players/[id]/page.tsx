@@ -1,28 +1,55 @@
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Flag, Shield, Swords, Users } from "lucide-react"
-import { getPlayerById, getMatchHistory } from "@/lib/data-service"
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Flag, Shield, Swords, Users } from "lucide-react";
+import {
+  getPlayerById,
+  getMatchHistory,
+  PlayerWithStatsAndTeamName,
+  MatchWithTeamNames,
+} from "@/lib/data-service";
 
-export default async function PlayerPage({ params }: { params: { id: string } }) {
-  const playerId = Number.parseInt(params.id)
-  const player = await getPlayerById(playerId)
+export default async function PlayerPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const playerId = Number.parseInt(params.id);
+  if (isNaN(playerId)) {
+    notFound();
+  }
+  const player: PlayerWithStatsAndTeamName | null = await getPlayerById(
+    playerId
+  );
 
   if (!player) {
-    notFound()
+    notFound();
   }
 
   // Get player's match history
-  const allMatches = await getMatchHistory()
-  const playerMatches = allMatches.filter((match) => match.teamA === player.team || match.teamB === player.team)
-
-  // Get player's nemesis (player who killed them the most)
-  const nemesis = player.stats.nemesisId ? await getPlayerById(player.stats.nemesisId) : null
+  const allMatches: MatchWithTeamNames[] = await getMatchHistory();
+  const playerMatches = allMatches.filter(
+    (match) =>
+      match.team_a_id === player.team_id || match.team_b_id === player.team_id
+  );
 
   return (
     <div className="container py-10">
@@ -31,17 +58,24 @@ export default async function PlayerPage({ params }: { params: { id: string } })
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
-                <AvatarFallback className="text-xl">{player.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarFallback className="text-xl">
+                  {(player.name || "NN").substring(0, 2).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">{player.name}</h1>
+                <h1 className="text-3xl font-bold tracking-tight">
+                  {player.name || "Unknown Player"}
+                </h1>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge variant="outline" className="flex items-center gap-1">
                     <Shield className="h-3 w-3 mr-1" />
-                    {player.team}
+                    {player.team_name || "N/A"}
                   </Badge>
                   {player.role && (
-                    <Badge variant="secondary" className="flex items-center gap-1">
+                    <Badge
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
                       {player.role}
                     </Badge>
                   )}
@@ -61,26 +95,38 @@ export default async function PlayerPage({ params }: { params: { id: string } })
           <div className="grid gap-6 md:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Flag Captures</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Flag Captures
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{player.stats.flagCaptures}</div>
+                <div className="text-2xl font-bold">
+                  {player.player_stats?.flag_captures || 0}
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Flag Returns</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Flag Returns
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{player.stats.flagReturns}</div>
+                <div className="text-2xl font-bold">
+                  {player.player_stats?.flag_returns || 0}
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Kills</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Total Kills
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{player.stats.overallKills}</div>
+                <div className="text-2xl font-bold">
+                  {player.player_stats?.overall_kills || 0}
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -89,7 +135,10 @@ export default async function PlayerPage({ params }: { params: { id: string } })
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {(player.stats.overallKills / Math.max(1, player.stats.overallDeaths)).toFixed(2)}
+                  {(
+                    (player.player_stats?.overall_kills || 0) /
+                    Math.max(1, player.player_stats?.overall_deaths || 0)
+                  ).toFixed(2)}
                 </div>
               </CardContent>
             </Card>
@@ -110,7 +159,9 @@ export default async function PlayerPage({ params }: { params: { id: string } })
               <Card>
                 <CardHeader>
                   <CardTitle>Player Statistics</CardTitle>
-                  <CardDescription>Detailed performance metrics for {player.name}</CardDescription>
+                  <CardDescription>
+                    Detailed performance metrics for {player.name || "Player"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-6 sm:grid-cols-2">
@@ -118,16 +169,28 @@ export default async function PlayerPage({ params }: { params: { id: string } })
                       <h3 className="text-lg font-medium">Flag Statistics</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Flag Captures</p>
-                          <p className="text-xl font-bold">{player.stats.flagCaptures}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Flag Captures
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.flag_captures || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Flag Returns</p>
-                          <p className="text-xl font-bold">{player.stats.flagReturns}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Flag Returns
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.flag_returns || 0}
+                          </p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Flag Hold Time</p>
-                          <p className="text-xl font-bold">{player.stats.flagholdTime}s</p>
+                          <p className="text-sm text-muted-foreground">
+                            Flag Hold Time
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.flaghold_time || 0}s
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -135,53 +198,62 @@ export default async function PlayerPage({ params }: { params: { id: string } })
                       <h3 className="text-lg font-medium">Combat Statistics</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Total Kills</p>
-                          <p className="text-xl font-bold">{player.stats.overallKills}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">Total Deaths</p>
-                          <p className="text-xl font-bold">{player.stats.overallDeaths}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">BC Kills</p>
-                          <p className="text-xl font-bold">{player.stats.bcKills}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">DBS Kills</p>
-                          <p className="text-xl font-bold">{player.stats.dbsKills || 0}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">DFA Kills</p>
-                          <p className="text-xl font-bold">{player.stats.dfaKills || 0}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm text-muted-foreground">K/D Ratio</p>
+                          <p className="text-sm text-muted-foreground">
+                            Total Kills
+                          </p>
                           <p className="text-xl font-bold">
-                            {(player.stats.overallKills / Math.max(1, player.stats.overallDeaths)).toFixed(2)}
+                            {player.player_stats?.overall_kills || 0}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">
+                            Total Deaths
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.overall_deaths || 0}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">
+                            BC Kills
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.bc_kills || 0}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">
+                            DBS Kills
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.dbs_kills || 0}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">
+                            DFA Kills
+                          </p>
+                          <p className="text-xl font-bold">
+                            {player.player_stats?.dfa_kills || 0}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">
+                            K/D Ratio
+                          </p>
+                          <p className="text-xl font-bold">
+                            {(
+                              (player.player_stats?.overall_kills || 0) /
+                              Math.max(
+                                1,
+                                player.player_stats?.overall_deaths || 0
+                              )
+                            ).toFixed(2)}
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {nemesis && (
-                    <div className="mt-8 pt-6 border-t">
-                      <h3 className="text-lg font-medium mb-4">Nemesis</h3>
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback>{nemesis.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{nemesis.name}</div>
-                          <div className="text-sm text-muted-foreground">{nemesis.team}</div>
-                        </div>
-                        <div className="ml-auto text-right">
-                          <div className="text-sm text-muted-foreground">Killed you</div>
-                          <div className="font-bold">{player.stats.nemesisKills || 0} times</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -189,7 +261,9 @@ export default async function PlayerPage({ params }: { params: { id: string } })
               <Card>
                 <CardHeader>
                   <CardTitle>Match History</CardTitle>
-                  <CardDescription>Matches played by {player.name}</CardDescription>
+                  <CardDescription>
+                    Matches played by {player.name || "Player"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {playerMatches.length > 0 ? (
@@ -205,11 +279,18 @@ export default async function PlayerPage({ params }: { params: { id: string } })
                       </TableHeader>
                       <TableBody>
                         {playerMatches.map((match) => {
-                          const isTeamA = match.teamA === player.team
-                          const opponent = isTeamA ? match.teamB : match.teamA
-                          const teamScore = isTeamA ? match.scoreA : match.scoreB
-                          const opponentScore = isTeamA ? match.scoreB : match.scoreA
-                          const result = teamScore > opponentScore ? "Win" : teamScore < opponentScore ? "Loss" : "Draw"
+                          const isTeamA = match.team_a_id === player.team_id;
+                          const opponentName = isTeamA
+                            ? match.team_b_name
+                            : match.team_a_name;
+                          const teamScore = match.score_a ?? 0;
+                          const opponentScore = match.score_b ?? 0;
+                          const result =
+                            teamScore > opponentScore
+                              ? "Win"
+                              : teamScore < opponentScore
+                              ? "Loss"
+                              : "Draw";
 
                           return (
                             <TableRow key={match.id}>
@@ -218,18 +299,25 @@ export default async function PlayerPage({ params }: { params: { id: string } })
                               </TableCell>
                               <TableCell>
                                 <div className="font-medium">
-                                  {player.team} vs {opponent}
+                                  {player.team_name || "N/A"} vs{" "}
+                                  {opponentName || "N/A"}
                                 </div>
                               </TableCell>
                               <TableCell>
                                 <Badge
-                                  variant={result === "Win" ? "success" : result === "Loss" ? "destructive" : "outline"}
+                                  variant={
+                                    result === "Win"
+                                      ? "outline"
+                                      : result === "Loss"
+                                      ? "destructive"
+                                      : "outline"
+                                  }
                                   className={
                                     result === "Win"
-                                      ? "bg-green-500/10 text-green-500"
+                                      ? "bg-green-500/10 text-green-500 border-green-700"
                                       : result === "Loss"
-                                        ? "bg-red-500/10 text-red-500"
-                                        : ""
+                                      ? "bg-red-500/10 text-red-500"
+                                      : ""
                                   }
                                 >
                                   {result}
@@ -246,12 +334,14 @@ export default async function PlayerPage({ params }: { params: { id: string } })
                                 </Link>
                               </TableCell>
                             </TableRow>
-                          )
+                          );
                         })}
                       </TableBody>
                     </Table>
                   ) : (
-                    <p className="text-muted-foreground">No match history available.</p>
+                    <p className="text-muted-foreground">
+                      No match history available.
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -260,5 +350,5 @@ export default async function PlayerPage({ params }: { params: { id: string } })
         </div>
       </div>
     </div>
-  )
+  );
 }
