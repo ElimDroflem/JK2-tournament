@@ -5,16 +5,40 @@ import {
   matchHistory as staticMatchHistory,
   upcomingMatches as staticUpcomingMatches,
 } from "./data";
+import type { Database, Tables, Enums } from "@/types/supabase";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { Database } from "@/types/supabase";
 
-// Cache for data
-let teamsCache: any[] | null = null;
-let playersCache: any[] | null = null;
-let matchHistoryCache: any[] | null = null;
-let upcomingMatchesCache: any[] | null = null;
+// Define more specific types for what our service functions will return
+// These can be adjusted based on exact frontend needs
 
-// Reset the cache (useful for admin operations)
+export type Team = Tables<"teams">;
+export type Player = Tables<"players">;
+export type Match = Tables<"matches">;
+export type TeamStats = Tables<"team_stats">;
+export type PlayerStats = Tables<"player_stats">;
+
+export interface TeamWithStatsAndPlayers extends Team {
+  team_stats: TeamStats | null;
+  players_list: Pick<Player, "id" | "name">[]; // Only basic player info for the list
+}
+
+export interface PlayerWithStatsAndTeamName extends Player {
+  player_stats: PlayerStats | null;
+  team_name: string | null;
+}
+
+export interface MatchWithTeamNames extends Match {
+  team_a_name: string | null;
+  team_b_name: string | null;
+}
+
+// Cache for data - use more specific types for cache
+let teamsCache: TeamWithStatsAndPlayers[] | null = null;
+let playersCache: PlayerWithStatsAndTeamName[] | null = null;
+let matchHistoryCache: MatchWithTeamNames[] | null = null;
+let upcomingMatchesCache: MatchWithTeamNames[] | null = null; // Upcoming matches will also have team names
+
+// Reset the cache
 export function resetCache() {
   console.log("Resetting data cache...");
   teamsCache = null;
@@ -23,559 +47,433 @@ export function resetCache() {
   upcomingMatchesCache = null;
 }
 
-// Function to format team data from Supabase to match our app's structure
-function formatTeamData(team: any, teamStats: any, teamPlayers: string[]) {
-  return {
-    id: team.id,
-    name: team.name || "Unknown Team",
-    founded: team.founded || "Unknown",
-    players: teamPlayers || [],
-    stats: {
-      matchesPlayed: teamStats?.matches_played || 0,
-      matchesWon: teamStats?.matches_won || 0,
-      matchesDrawn: teamStats?.matches_drawn || 0,
-      matchesLost: teamStats?.matches_lost || 0,
-      captures: teamStats?.captures || 0,
-      flagReturns: teamStats?.flag_returns || 0,
-      kills: teamStats?.kills || 0,
-      points: teamStats?.points || 0,
-    },
-  };
-}
-
-// Function to format player data from Supabase to match our app's structure
-function formatPlayerData(player: any, playerStats: any, teamName: string) {
-  return {
-    id: player.id,
-    name: player.name || "Unknown Player",
-    team: teamName || "Unknown Team",
-    team_id: player.team_id || 0,
-    role: player.role || "Player",
-    stats: {
-      impact: playerStats?.impact || 0,
-      flagCaptures: playerStats?.flag_captures || 0,
-      flagReturns: playerStats?.flag_returns || 0,
-      bcKills: playerStats?.bc_kills || 0,
-      dbsKills: playerStats?.dbs_kills || 0,
-      dfaKills: playerStats?.dfa_kills || 0,
-      overallKills: playerStats?.overall_kills || 0,
-      overallDeaths: playerStats?.overall_deaths || 0,
-      flagholdTime: playerStats?.flaghold_time || 0,
-      nemesisId: playerStats?.nemesis_id || null,
-    },
-  };
-}
-
-// Function to format match data from Supabase to match our app's structure
-function formatMatchData(match: any, teamAName: string, teamBName: string) {
-  return {
-    id: match.id,
-    round: match.round || "Unknown Round",
-    teamA: teamAName || "Unknown Team A",
-    teamB: teamBName || "Unknown Team B",
-    scoreA: match.score_a || 0,
-    scoreB: match.score_b || 0,
-    date: match.date || "TBD",
-    time: match.time || "TBD",
-    teamAReturns: match.team_a_returns || 0,
-    teamBReturns: match.team_b_returns || 0,
-    teamAKills: match.team_a_kills || 0,
-    teamBKills: match.team_b_kills || 0,
-    teamAFlagTime: match.team_a_flag_time || 0,
-    teamBFlagTime: match.team_b_flag_time || 0,
-    is_completed: match.is_completed || false,
-  };
+// Helper to get Supabase client, ensuring it's configured
+function getSupabaseClient(): SupabaseClient<Database> | null {
+  if (!supabase || !isSupabaseConfigured()) {
+    return null;
+  }
+  return supabase as SupabaseClient<Database>;
 }
 
 // Get teams data
-export async function getTeams() {
+export async function getTeams(): Promise<TeamWithStatsAndPlayers[]> {
+  if (teamsCache) {
+    return teamsCache;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log(
+      "Supabase not configured, using static data for teams (if available and shaped correctly)"
+    );
+    // TODO: Adjust staticTeams structure or provide a mapping function if used as fallback
+    return staticTeams as any; // Cast as any for now, ideally static data matches TeamWithStatsAndPlayers
+  }
+
   try {
-    // Check if we have cached data
-    if (teamsCache) {
-      return teamsCache;
-    }
-
-    // Check if Supabase is configured
-    if (!supabase || !isSupabaseConfigured()) {
-      console.log("Supabase not configured, using static data for teams");
-      return staticTeams;
-    }
-
-    const client = supabase as SupabaseClient<Database>;
-
-    // Try to fetch from Supabase
     const { data: teamsData, error: teamsError } = await client
       .from("teams")
-      .select("*")
-      .order("id");
+      .select(
+        `
+        *,
+        team_stats (*),
+        players (id, name)
+      `
+      )
+      .order("name", { ascending: true });
 
-    if (teamsError || !teamsData) {
-      console.error("Error fetching teams from Supabase:", teamsError);
-      // Fall back to static data
-      return staticTeams;
+    if (teamsError) {
+      console.error("Error fetching teams from Supabase:", teamsError.message);
+      return staticTeams as any; // Fallback
     }
 
-    // Get team stats
-    const { data: teamStatsData, error: teamStatsError } = await client
-      .from("team_stats")
-      .select("*");
-
-    if (teamStatsError) {
-      console.error("Error fetching team stats from Supabase:", teamStatsError);
-      // Fall back to static data
-      return staticTeams;
+    if (!teamsData) {
+      return [];
     }
 
-    // Get players for each team
-    const { data: playersData, error: playersError } = await client
-      .from("players")
-      .select("*");
+    const formattedTeams: TeamWithStatsAndPlayers[] = teamsData.map((team) => ({
+      ...team,
+      team_stats: Array.isArray(team.team_stats)
+        ? team.team_stats[0] || null
+        : team.team_stats || null, // Supabase might return array for one-to-one if not unique
+      players_list: team.players || [],
+    }));
 
-    if (playersError) {
-      console.error("Error fetching players from Supabase:", playersError);
-      // Fall back to static data
-      return staticTeams;
-    }
-
-    // Format the data
-    const formattedTeams = teamsData.map((team) => {
-      const teamStats = teamStatsData?.find(
-        (stats) => stats.team_id === team.id
-      );
-      const teamPlayers =
-        playersData
-          ?.filter((player) => player.team_id === team.id)
-          .map((player) => player.name) || [];
-
-      return formatTeamData(team, teamStats, teamPlayers);
-    });
-
-    // Cache the formatted data
     teamsCache = formattedTeams;
     return formattedTeams;
-  } catch (error) {
-    console.error("Error in getTeams:", error);
-    // Fall back to static data
-    return staticTeams;
+  } catch (error: any) {
+    console.error("Error in getTeams:", error.message);
+    return staticTeams as any; // Fallback
   }
 }
 
 // Get players data
-export async function getPlayers() {
+export async function getPlayers(): Promise<PlayerWithStatsAndTeamName[]> {
+  if (playersCache) {
+    return playersCache;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log(
+      "Supabase not configured, using static data for players (if available and shaped correctly)"
+    );
+    return staticPlayers as any; // Cast as any, ideally static data matches PlayerWithStatsAndTeamName
+  }
+
   try {
-    // Check if we have cached data
-    if (playersCache) {
-      return playersCache;
-    }
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      console.log("Supabase not configured, using static data for players");
-      return staticPlayers;
-    }
-
-    // Try to fetch from Supabase
-    const { data: playersData, error: playersError } = await supabase
+    const { data: playersData, error: playersError } = await client
       .from("players")
-      .select("*")
-      .order("id");
+      .select(
+        `
+        *,
+        player_stats (*),
+        teams (name)
+      `
+      )
+      .order("name", { ascending: true });
 
-    if (playersError || !playersData) {
-      console.error("Error fetching players from Supabase:", playersError);
-      // Fall back to static data
-      return staticPlayers;
-    }
-
-    // Get player stats
-    const { data: playerStatsData, error: playerStatsError } = await supabase
-      .from("player_stats")
-      .select("*");
-
-    if (playerStatsError) {
+    if (playersError) {
       console.error(
-        "Error fetching player stats from Supabase:",
-        playerStatsError
+        "Error fetching players from Supabase:",
+        playersError.message
       );
-      // Fall back to static data
-      return staticPlayers;
+      return staticPlayers as any; // Fallback
+    }
+    if (!playersData) {
+      return [];
     }
 
-    // Get teams for mapping team names
-    const { data: teamsData, error: teamsError } = await supabase
-      .from("teams")
-      .select("*");
+    const formattedPlayers: PlayerWithStatsAndTeamName[] = playersData.map(
+      (player) => {
+        const team = player.teams as Tables<"teams"> | null;
+        return {
+          ...player,
+          player_stats: Array.isArray(player.player_stats)
+            ? player.player_stats[0] || null
+            : player.player_stats || null,
+          team_name: team?.name || "N/A",
+          teams: undefined, // Remove the nested 'teams' object after extracting name
+        } as PlayerWithStatsAndTeamName;
+      }
+    );
 
-    if (teamsError) {
-      console.error("Error fetching teams from Supabase:", teamsError);
-      // Fall back to static data
-      return staticPlayers;
-    }
-
-    // Format the data
-    const formattedPlayers = playersData.map((player) => {
-      const playerStats = playerStatsData?.find(
-        (stats) => stats.player_id === player.id
-      );
-      const team = teamsData?.find((team) => team.id === player.team_id);
-      const teamName = team?.name || "Unknown Team";
-
-      return formatPlayerData(player, playerStats, teamName);
-    });
-
-    // Cache the formatted data
     playersCache = formattedPlayers;
     return formattedPlayers;
-  } catch (error) {
-    console.error("Error in getPlayers:", error);
-    // Fall back to static data
-    return staticPlayers;
+  } catch (error: any) {
+    console.error("Error in getPlayers:", error.message);
+    return staticPlayers as any; // Fallback
   }
 }
 
-// Get match history data
-export async function getMatchHistory() {
+// Get match history data (completed matches)
+export async function getMatchHistory(): Promise<MatchWithTeamNames[]> {
+  if (matchHistoryCache) {
+    return matchHistoryCache;
+  }
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log("Supabase not configured, using static data for match history");
+    return staticMatchHistory as any; // Adjust static data shape if necessary
+  }
+
   try {
-    // Check if we have cached data
-    if (matchHistoryCache) {
-      return matchHistoryCache;
-    }
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      console.log(
-        "Supabase not configured, using static data for match history"
-      );
-      return staticMatchHistory;
-    }
-
-    // Try to fetch from Supabase
-    const { data: matchesData, error: matchesError } = await supabase
+    const { data: matchesData, error: matchesError } = await client
       .from("matches")
-      .select("*")
+      .select(
+        `
+        *,
+        team_a:teams!matches_team_a_id_fkey (name),
+        team_b:teams!matches_team_b_id_fkey (name)
+      `
+      )
       .eq("is_completed", true)
-      .order("date", { ascending: false });
+      .order("date", { ascending: false })
+      .order("time", { ascending: false });
 
-    if (matchesError || !matchesData) {
+    if (matchesError) {
       console.error(
         "Error fetching match history from Supabase:",
-        matchesError
+        matchesError.message
       );
-      // Fall back to static data
-      return staticMatchHistory;
+      return staticMatchHistory as any;
     }
+    if (!matchesData) return [];
 
-    // Get teams for mapping team names
-    const { data: teamsData, error: teamsError } = await supabase
-      .from("teams")
-      .select("*");
+    const formattedMatches: MatchWithTeamNames[] = matchesData.map((match) => ({
+      ...match,
+      team_a_name: (match.team_a as any)?.name || "N/A",
+      team_b_name: (match.team_b as any)?.name || "N/A",
+      team_a: undefined, // clean up
+      team_b: undefined, // clean up
+    }));
 
-    if (teamsError) {
-      console.error("Error fetching teams from Supabase:", teamsError);
-      // Fall back to static data
-      return staticMatchHistory;
-    }
-
-    // Format the data
-    const formattedMatches = matchesData.map((match) => {
-      const teamA = teamsData?.find((team) => team.id === match.team_a_id);
-      const teamB = teamsData?.find((team) => team.id === match.team_b_id);
-      const teamAName = teamA?.name || "Unknown Team";
-      const teamBName = teamB?.name || "Unknown Team";
-
-      return formatMatchData(match, teamAName, teamBName);
-    });
-
-    // Cache the formatted data
     matchHistoryCache = formattedMatches;
     return formattedMatches;
-  } catch (error) {
-    console.error("Error in getMatchHistory:", error);
-    // Fall back to static data
-    return staticMatchHistory;
+  } catch (error: any) {
+    console.error("Error in getMatchHistory:", error.message);
+    return staticMatchHistory as any;
   }
 }
 
-// Get upcoming matches data
-export async function getUpcomingMatches() {
+// Get upcoming matches data (non-completed matches)
+export async function getUpcomingMatches(): Promise<MatchWithTeamNames[]> {
+  if (upcomingMatchesCache) {
+    return upcomingMatchesCache;
+  }
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log(
+      "Supabase not configured, using static data for upcoming matches"
+    );
+    return staticUpcomingMatches as any; // Adjust static data shape
+  }
   try {
-    // Check if we have cached data
-    if (upcomingMatchesCache) {
-      return upcomingMatchesCache;
-    }
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      console.log(
-        "Supabase not configured, using static data for upcoming matches"
-      );
-      return staticUpcomingMatches;
-    }
-
-    // Try to fetch from Supabase
-    const { data: matchesData, error: matchesError } = await supabase
+    const { data: matchesData, error: matchesError } = await client
       .from("matches")
-      .select("*")
+      .select(
+        `
+        *,
+        team_a:teams!matches_team_a_id_fkey (name),
+        team_b:teams!matches_team_b_id_fkey (name)
+      `
+      )
       .eq("is_completed", false)
-      .order("date");
+      .order("date", { ascending: true })
+      .order("time", { ascending: true });
 
-    if (matchesError || !matchesData) {
+    if (matchesError) {
       console.error(
         "Error fetching upcoming matches from Supabase:",
-        matchesError
+        matchesError.message
       );
-      // Fall back to static data
-      return staticUpcomingMatches;
+      return staticUpcomingMatches as any;
     }
+    if (!matchesData) return [];
 
-    // Get teams for mapping team names
-    const { data: teamsData, error: teamsError } = await supabase
-      .from("teams")
-      .select("*");
+    const formattedMatches: MatchWithTeamNames[] = matchesData.map((match) => ({
+      ...match,
+      team_a_name: (match.team_a as any)?.name || "N/A",
+      team_b_name: (match.team_b as any)?.name || "N/A",
+      team_a: undefined, // clean up
+      team_b: undefined, // clean up
+    }));
 
-    if (teamsError) {
-      console.error("Error fetching teams from Supabase:", teamsError);
-      // Fall back to static data
-      return staticUpcomingMatches;
-    }
-
-    // Format the data
-    const formattedMatches = matchesData.map((match) => {
-      const teamA = teamsData?.find((team) => team.id === match.team_a_id);
-      const teamB = teamsData?.find((team) => team.id === match.team_b_id);
-      const teamAName = teamA?.name || "Unknown Team";
-      const teamBName = teamB?.name || "Unknown Team";
-
-      return {
-        id: match.id,
-        round: match.round || "Unknown Round",
-        teamA: teamAName,
-        teamB: teamBName,
-        date: match.date || "TBD",
-        time: match.time || "TBD",
-      };
-    });
-
-    // Cache the formatted data
     upcomingMatchesCache = formattedMatches;
     return formattedMatches;
-  } catch (error) {
-    console.error("Error in getUpcomingMatches:", error);
-    // Fall back to static data
-    return staticUpcomingMatches;
+  } catch (error: any) {
+    console.error("Error in getUpcomingMatches:", error.message);
+    return staticUpcomingMatches as any;
   }
 }
 
 // Get a specific team by ID
-export async function getTeamById(id: number) {
+export async function getTeamById(
+  id: number
+): Promise<TeamWithStatsAndPlayers | null> {
+  // Try to get from cache first (implementation detail: might need to ensure cache is populated)
+  if (teamsCache) {
+    const cachedTeam = teamsCache.find((t) => t.id === id);
+    if (cachedTeam) return cachedTeam;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log(
+      `Supabase not configured, attempting to find team ID ${id} in static data.`
+    );
+    // TODO: Adjust staticTeams structure or provide a mapping function
+    return (staticTeams as any[]).find((t) => t.id === id) || null;
+  }
+
   try {
-    // Try to get from cache first
-    const teams = await getTeams();
-    const team = teams.find((t) => t.id === id);
-    if (team) {
-      return team;
-    }
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      console.log("Supabase not configured, using static data for team");
-      return staticTeams.find((t) => t.id === id);
-    }
-
-    // If not in cache, try to fetch directly
-    const { data: teamData, error: teamError } = await supabase
+    const { data: teamData, error: teamError } = await client
       .from("teams")
-      .select("*")
+      .select(
+        `
+        *,
+        team_stats (*),
+        players (id, name)
+      `
+      )
       .eq("id", id)
       .single();
 
-    if (teamError || !teamData) {
-      console.error("Error fetching team from Supabase:", teamError);
-      // Fall back to static data
-      return staticTeams.find((t) => t.id === id);
+    if (teamError) {
+      console.error(
+        `Error fetching team ID ${id} from Supabase:`,
+        teamError.message
+      );
+      return null;
     }
+    if (!teamData) return null;
 
-    // Get team stats
-    const { data: teamStatsData, error: teamStatsError } = await supabase
-      .from("team_stats")
-      .select("*")
-      .eq("team_id", id)
-      .single();
+    const formattedTeam: TeamWithStatsAndPlayers = {
+      ...teamData,
+      team_stats: Array.isArray(teamData.team_stats)
+        ? teamData.team_stats[0] || null
+        : teamData.team_stats || null,
+      players_list: teamData.players || [],
+    };
 
-    if (teamStatsError) {
-      console.error("Error fetching team stats from Supabase:", teamStatsError);
-      // Fall back to static data
-      return staticTeams.find((t) => t.id === id);
+    // Optionally, update the cache
+    if (teamsCache) {
+      const index = teamsCache.findIndex((t) => t.id === id);
+      if (index !== -1) teamsCache[index] = formattedTeam;
+      else teamsCache.push(formattedTeam);
+    } else {
+      teamsCache = [formattedTeam];
     }
-
-    // Get players for the team
-    const { data: playersData, error: playersError } = await supabase
-      .from("players")
-      .select("*")
-      .eq("team_id", id);
-
-    if (playersError) {
-      console.error("Error fetching players from Supabase:", playersError);
-      // Fall back to static data
-      return staticTeams.find((t) => t.id === id);
-    }
-
-    const teamPlayers = playersData?.map((player) => player.name) || [];
-    return formatTeamData(teamData, teamStatsData, teamPlayers);
-  } catch (error) {
-    console.error("Error in getTeamById:", error);
-    // Fall back to static data
-    return staticTeams.find((t) => t.id === id);
+    return formattedTeam;
+  } catch (error: any) {
+    console.error(`Error in getTeamById for ID ${id}:`, error.message);
+    return null;
   }
 }
 
 // Get a specific player by ID
-export async function getPlayerById(id: number) {
+export async function getPlayerById(
+  id: number
+): Promise<PlayerWithStatsAndTeamName | null> {
+  if (playersCache) {
+    const cachedPlayer = playersCache.find((p) => p.id === id);
+    if (cachedPlayer) return cachedPlayer;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log(
+      `Supabase not configured, attempting to find player ID ${id} in static data.`
+    );
+    return (staticPlayers as any[]).find((p) => p.id === id) || null;
+  }
+
   try {
-    // Try to get from cache first
-    const players = await getPlayers();
-    const player = players.find((p) => p.id === id);
-    if (player) {
-      return player;
-    }
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      console.log("Supabase not configured, using static data for player");
-      return staticPlayers.find((p) => p.id === id);
-    }
-
-    // If not in cache, try to fetch directly
-    const { data: playerData, error: playerError } = await supabase
+    const { data: playerData, error: playerError } = await client
       .from("players")
-      .select("*")
+      .select(
+        `
+        *,
+        player_stats (*),
+        teams (name) 
+      `
+      )
       .eq("id", id)
       .single();
 
-    if (playerError || !playerData) {
-      console.error("Error fetching player from Supabase:", playerError);
-      // Fall back to static data
-      return staticPlayers.find((p) => p.id === id);
-    }
-
-    // Get player stats
-    const { data: playerStatsData, error: playerStatsError } = await supabase
-      .from("player_stats")
-      .select("*")
-      .eq("player_id", id)
-      .single();
-
-    if (playerStatsError) {
+    if (playerError) {
       console.error(
-        "Error fetching player stats from Supabase:",
-        playerStatsError
+        `Error fetching player ID ${id} from Supabase:`,
+        playerError.message
       );
-      // Fall back to static data
-      return staticPlayers.find((p) => p.id === id);
+      return null;
     }
+    if (!playerData) return null;
 
-    // Get team for the player
-    const { data: teamData, error: teamError } = await supabase
-      .from("teams")
-      .select("*")
-      .eq("id", playerData.team_id)
-      .single();
+    const team = playerData.teams as Tables<"teams"> | null;
+    const formattedPlayer: PlayerWithStatsAndTeamName = {
+      ...playerData,
+      player_stats: Array.isArray(playerData.player_stats)
+        ? playerData.player_stats[0] || null
+        : playerData.player_stats || null,
+      team_name: team?.name || "N/A",
+      teams: undefined, // clean up
+    } as PlayerWithStatsAndTeamName;
 
-    if (teamError) {
-      console.error("Error fetching team from Supabase:", teamError);
-      // Fall back to static data
-      return staticPlayers.find((p) => p.id === id);
+    // Optionally, update the cache
+    if (playersCache) {
+      const index = playersCache.findIndex((p) => p.id === id);
+      if (index !== -1) playersCache[index] = formattedPlayer;
+      else playersCache.push(formattedPlayer);
+    } else {
+      playersCache = [formattedPlayer];
     }
-
-    return formatPlayerData(playerData, playerStatsData, teamData.name);
-  } catch (error) {
-    console.error("Error in getPlayerById:", error);
-    // Fall back to static data
-    return staticPlayers.find((p) => p.id === id);
+    return formattedPlayer;
+  } catch (error: any) {
+    console.error(`Error in getPlayerById for ID ${id}:`, error.message);
+    return null;
   }
 }
 
 // Get a specific match by ID
-export async function getMatchById(id: number) {
+export async function getMatchById(
+  id: number
+): Promise<MatchWithTeamNames | null> {
+  if (matchHistoryCache) {
+    const cachedMatch = matchHistoryCache.find((m) => m.id === id);
+    if (cachedMatch) return cachedMatch;
+  }
+  if (upcomingMatchesCache) {
+    const cachedMatch = upcomingMatchesCache.find((m) => m.id === id);
+    if (cachedMatch) return cachedMatch;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log(
+      `Supabase not configured, attempting to find match ID ${id} in static data.`
+    );
+    // Assuming staticMatchHistory and staticUpcomingMatches items are now shaped like MatchWithTeamNames
+    // or have a compatible structure. If not, they need adjustment or a mapping function.
+    const staticMatchFromHistory = staticMatchHistory.find(
+      (m: any) => m.id === id
+    ) as MatchWithTeamNames | undefined;
+    if (staticMatchFromHistory) return staticMatchFromHistory;
+    const staticMatchUpcoming = staticUpcomingMatches.find(
+      (m: any) => m.id === id
+    ) as MatchWithTeamNames | undefined;
+    return staticMatchUpcoming || null;
+  }
+
   try {
-    // Try to get from cache first
-    const matchHistory = await getMatchHistory();
-    const match = matchHistory.find((m) => m.id === id);
-    if (match) {
-      return match;
-    }
-
-    const upcomingMatches = await getUpcomingMatches();
-    const upcomingMatch = upcomingMatches.find((m) => m.id === id);
-    if (upcomingMatch) {
-      return upcomingMatch;
-    }
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      console.log("Supabase not configured, using static data for match");
-      const staticMatch =
-        staticMatchHistory.find((m) => m.id === id) ||
-        staticUpcomingMatches.find((m) => m.id === id);
-      if (!staticMatch) {
-        console.log(`Match with ID ${id} not found in static data`);
-        return null;
-      }
-      return staticMatch;
-    }
-
-    // If not in cache, try to fetch directly
-    const { data: matchData, error: matchError } = await supabase
+    const { data: matchData, error: matchError } = await client
       .from("matches")
-      .select("*")
+      .select(
+        `
+        *,
+        team_a:teams!matches_team_a_id_fkey (name),
+        team_b:teams!matches_team_b_id_fkey (name)
+      `
+      )
       .eq("id", id)
       .single();
 
-    if (matchError || !matchData) {
+    if (matchError) {
       console.error(
-        `Error fetching match with ID ${id} from Supabase:`,
-        matchError
+        `Error fetching match ID ${id} from Supabase:`,
+        matchError.message
       );
-      // Return null to indicate match not found
       return null;
     }
+    if (!matchData) return null;
 
-    // Get teams for the match
-    const { data: teamAData, error: teamAError } = await supabase
-      .from("teams")
-      .select("*")
-      .eq("id", matchData.team_a_id)
-      .single();
+    const formattedMatch: MatchWithTeamNames = {
+      ...matchData,
+      team_a_name: (matchData.team_a as any)?.name || "N/A",
+      team_b_name: (matchData.team_b as any)?.name || "N/A",
+    };
 
-    const { data: teamBData, error: teamBError } = await supabase
-      .from("teams")
-      .select("*")
-      .eq("id", matchData.team_b_id)
-      .single();
-
-    if (teamAError || teamBError) {
-      console.error(
-        "Error fetching teams from Supabase:",
-        teamAError || teamBError
-      );
-      // Return null to indicate match not found
-      return null;
-    }
-
-    if (matchData.is_completed) {
-      return formatMatchData(matchData, teamAData.name, teamBData.name);
+    // Optionally, update the appropriate cache
+    if (formattedMatch.is_completed) {
+      if (matchHistoryCache) {
+        const index = matchHistoryCache.findIndex((m) => m.id === id);
+        if (index !== -1) matchHistoryCache[index] = formattedMatch;
+        else matchHistoryCache.push(formattedMatch);
+      } else {
+        matchHistoryCache = [formattedMatch];
+      }
     } else {
-      return {
-        id: matchData.id,
-        round: matchData.round,
-        teamA: teamAData.name,
-        teamB: teamBData.name,
-        date: matchData.date,
-        time: matchData.time || "",
-      };
+      if (upcomingMatchesCache) {
+        const index = upcomingMatchesCache.findIndex((m) => m.id === id);
+        if (index !== -1) upcomingMatchesCache[index] = formattedMatch;
+        else upcomingMatchesCache.push(formattedMatch);
+      } else {
+        upcomingMatchesCache = [formattedMatch];
+      }
     }
-  } catch (error) {
-    console.error(`Error in getMatchById for ID ${id}:`, error);
-    // Return null to indicate match not found
+    return formattedMatch;
+  } catch (error: any) {
+    console.error(`Error in getMatchById for ID ${id}:`, error.message);
     return null;
   }
 }

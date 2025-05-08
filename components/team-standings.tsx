@@ -1,13 +1,22 @@
-import Link from "next/link"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getTeams } from "@/lib/data-service"
+import Link from "next/link";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getTeams } from "@/lib/data-service";
 
 export default async function TeamStandings() {
   // Fetch teams from Supabase
-  const teams = await getTeams()
+  const teams = await getTeams();
 
   // Sort teams by points (descending)
-  const sortedTeams = [...teams].sort((a, b) => b.stats.points - a.stats.points)
+  const sortedTeams = [...teams].sort(
+    (a, b) => (b.team_stats?.points || 0) - (a.team_stats?.points || 0)
+  );
 
   return (
     <div className="overflow-auto">
@@ -27,14 +36,25 @@ export default async function TeamStandings() {
             <TableRow key={team.id} className="hover:bg-imperial-light/5">
               <TableCell className="font-medium">{index + 1}</TableCell>
               <TableCell>
-                <Link href={`/teams/${team.id}`} className="font-medium hover:underline">
+                <Link
+                  href={`/teams/${team.id}`}
+                  className="font-medium hover:underline"
+                >
                   {team.name}
                 </Link>
               </TableCell>
-              <TableCell className="text-center">{team.stats.matchesWon}</TableCell>
-              <TableCell className="text-center">{team.stats.matchesDrawn}</TableCell>
-              <TableCell className="text-center">{team.stats.matchesLost}</TableCell>
-              <TableCell className="text-right font-medium text-jkhub">{team.stats.points}</TableCell>
+              <TableCell className="text-center">
+                {team.team_stats?.matches_won || 0}
+              </TableCell>
+              <TableCell className="text-center">
+                {team.team_stats?.matches_drawn || 0}
+              </TableCell>
+              <TableCell className="text-center">
+                {team.team_stats?.matches_lost || 0}
+              </TableCell>
+              <TableCell className="text-right font-medium text-jkhub">
+                {team.team_stats?.points || 0}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -45,5 +65,5 @@ export default async function TeamStandings() {
         </Link>
       </div>
     </div>
-  )
+  );
 }
