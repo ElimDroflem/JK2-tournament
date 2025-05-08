@@ -1,31 +1,48 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Shield, Trophy, Users } from "lucide-react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Shield, Trophy, Users } from "lucide-react";
+import type {
+  TeamWithStatsAndPlayers,
+  PlayerWithStatsAndTeamName,
+} from "@/lib/data-service";
 
 interface TeamDetailCardProps {
-  team: any
-  players: any[]
+  team: TeamWithStatsAndPlayers;
+  players: PlayerWithStatsAndTeamName[];
 }
 
 export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
+  // Safely access stats for calculations
+  const matchesPlayed = team.team_stats?.matches_played || 0;
+  const matchesWon = team.team_stats?.matches_won || 0;
+  const captures = team.team_stats?.captures || 0;
+  const flagReturns = team.team_stats?.flag_returns || 0;
+  const points = team.team_stats?.points || 0;
+
   // Calculate win percentage
   const winPercentage =
-    team.stats.matchesPlayed > 0 ? Math.round((team.stats.matchesWon / team.stats.matchesPlayed) * 100) : 0
+    matchesPlayed > 0 ? Math.round((matchesWon / matchesPlayed) * 100) : 0;
 
   // Get team color class based on team name
   const getTeamColorClass = (teamName: string) => {
     if (teamName.includes("Force") || teamName.includes("Jedi")) {
-      return "text-jedi"
+      return "text-jedi";
     } else if (teamName.includes("Sith")) {
-      return "text-sith"
+      return "text-sith";
     } else if (teamName.includes("Beskar") || teamName.includes("Kyber")) {
-      return "text-bespin"
+      return "text-bespin";
     } else {
-      return "text-imperial"
+      return "text-imperial";
     }
-  }
+  };
 
   return (
     <Card className="overflow-hidden">
@@ -36,8 +53,8 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
               team.name.includes("Force") || team.name.includes("Jedi")
                 ? "bg-jedi/20"
                 : team.name.includes("Sith")
-                  ? "bg-sith/20"
-                  : "bg-imperial/20"
+                ? "bg-sith/20"
+                : "bg-imperial/20"
             }`}
           >
             <Shield className={`h-6 w-6 ${getTeamColorClass(team.name)}`} />
@@ -54,7 +71,13 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Win Rate</span>
-                <span className={`text-sm font-medium ${getTeamColorClass(team.name)}`}>{winPercentage}%</span>
+                <span
+                  className={`text-sm font-medium ${getTeamColorClass(
+                    team.name
+                  )}`}
+                >
+                  {winPercentage}%
+                </span>
               </div>
               <Progress value={winPercentage} className="h-2" />
             </div>
@@ -62,12 +85,20 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Flag Efficiency</span>
-                <span className={`text-sm font-medium ${getTeamColorClass(team.name)}`}>
-                  {team.stats.captures}/{team.stats.flagReturns}
+                <span
+                  className={`text-sm font-medium ${getTeamColorClass(
+                    team.name
+                  )}`}
+                >
+                  {captures}/{flagReturns}
                 </span>
               </div>
               <Progress
-                value={team.stats.flagReturns > 0 ? (team.stats.captures / team.stats.flagReturns) * 100 : 0}
+                value={
+                  flagReturns > 0
+                    ? (captures / Math.max(1, flagReturns)) * 100
+                    : 0
+                }
                 className="h-2"
               />
             </div>
@@ -78,7 +109,13 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
               <Trophy className="h-5 w-5 text-muted-foreground" />
               <div>
                 <div className="text-sm font-medium">Tournament Points</div>
-                <div className={`text-xl font-bold ${getTeamColorClass(team.name)}`}>{team.stats.points}</div>
+                <div
+                  className={`text-xl font-bold ${getTeamColorClass(
+                    team.name
+                  )}`}
+                >
+                  {points}
+                </div>
               </div>
             </div>
 
@@ -86,7 +123,9 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
               <Users className="h-5 w-5 text-muted-foreground" />
               <div>
                 <div className="text-sm font-medium">Team Size</div>
-                <div className="text-xl font-bold">{players.length} players</div>
+                <div className="text-xl font-bold">
+                  {players.length} players
+                </div>
               </div>
             </div>
 
@@ -104,35 +143,51 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
             <div className="space-y-2">
               {players
                 .sort(
-                  (a, b) => b.stats.flagCaptures + b.stats.flagReturns - (a.stats.flagCaptures + a.stats.flagReturns),
+                  (a, b) =>
+                    (b.player_stats?.flag_captures || 0) +
+                    (b.player_stats?.flag_returns || 0) -
+                    ((a.player_stats?.flag_captures || 0) +
+                      (a.player_stats?.flag_returns || 0))
                 )
                 .slice(0, 3)
                 .map((player) => (
-                  <div key={player.id} className="flex items-center justify-between bg-background p-2 rounded-md">
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between bg-background p-2 rounded-md"
+                  >
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
                         <AvatarFallback
                           className={`${
-                            team.name.includes("Force") || team.name.includes("Jedi")
+                            team.name.includes("Force") ||
+                            team.name.includes("Jedi")
                               ? "bg-jedi/20 text-jedi"
                               : team.name.includes("Sith")
-                                ? "bg-sith/20 text-sith"
-                                : "bg-imperial/20 text-bespin"
+                              ? "bg-sith/20 text-sith"
+                              : "bg-imperial/20 text-bespin"
                           }`}
                         >
-                          {player.name.substring(0, 2).toUpperCase()}
+                          {(player.name || "NN").substring(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="font-medium">{player.name}</div>
+                      <div className="font-medium">
+                        {player.name || "Unknown Player"}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="flex items-center gap-1">
+                      <Badge
+                        variant="outline"
+                        className="flex items-center gap-1"
+                      >
                         <Trophy className="h-3 w-3 mr-1" />
-                        {player.stats.flagCaptures} caps
+                        {player.player_stats?.flag_captures || 0} caps
                       </Badge>
-                      <Badge variant="outline" className="flex items-center gap-1">
+                      <Badge
+                        variant="outline"
+                        className="flex items-center gap-1"
+                      >
                         <Shield className="h-3 w-3 mr-1" />
-                        {player.stats.flagReturns} returns
+                        {player.player_stats?.flag_returns || 0} returns
                       </Badge>
                     </div>
                   </div>
@@ -142,5 +197,5 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

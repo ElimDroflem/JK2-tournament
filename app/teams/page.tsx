@@ -183,18 +183,25 @@ export default async function TeamsPage() {
                           .filter((player) => player.role !== "Captain")
                           .slice(0, 4)
                           .map((player) => (
-                            <Badge
+                            <Link
                               key={player.id}
-                              variant="secondary"
-                              className="flex items-center gap-1"
+                              href={`/players/${player.id}`}
+                              passHref
                             >
-                              <Avatar className="h-4 w-4">
-                                <AvatarFallback className="text-[10px]">
-                                  {player.name.substring(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              {player.name}
-                            </Badge>
+                              <Badge
+                                variant="secondary"
+                                className="flex items-center gap-1 cursor-pointer hover:bg-primary/10"
+                              >
+                                <Avatar className="h-4 w-4">
+                                  <AvatarFallback className="text-[10px]">
+                                    {(player.name || "NN")
+                                      .substring(0, 2)
+                                      .toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {player.name || "Unknown Player"}
+                              </Badge>
+                            </Link>
                           ))}
                         {teamPlayers.filter(
                           (player) => player.role !== "Captain"

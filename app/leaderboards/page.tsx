@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Shield, Trophy, Users } from "lucide-react";
 import { getTeams, getPlayers } from "@/lib/data-service";
 import DataStatus from "@/components/data-status";
+import Link from "next/link";
 
 export default async function LeaderboardsPage() {
   // Fetch teams and players from Supabase
@@ -152,28 +153,33 @@ export default async function LeaderboardsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback>
-                            {(player.name || "NN")
-                              .substring(0, 2)
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col">
-                          <div className="font-medium">
-                            {player.name || "Unknown Player"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {player.team_name || "N/A"}
+                      <Link
+                        href={`/players/${player.id}`}
+                        className="hover:underline"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback>
+                              {(player.name || "NN")
+                                .substring(0, 2)
+                                .toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col">
+                            <div className="font-medium">
+                              {player.name || "Unknown Player"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {player.team_name || "N/A"}
+                            </div>
                           </div>
                         </div>
-                        {index === 0 && (
-                          <Badge variant="secondary" className="ml-2">
-                            MVP
-                          </Badge>
-                        )}
-                      </div>
+                      </Link>
+                      {index === 0 && (
+                        <Badge variant="secondary" className="ml-2">
+                          MVP
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-medium text-jkhub">
                       {player.player_stats?.impact || 0}

@@ -190,32 +190,37 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                       {teamPlayers.map((player) => (
                         <TableRow key={player.id}>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback
-                                  className={`${
-                                    team.name.includes("Force") ||
-                                    team.name.includes("Jedi")
-                                      ? "bg-jedi/20 text-jedi"
-                                      : team.name.includes("Sith")
-                                      ? "bg-sith/20 text-sith"
-                                      : "bg-imperial/20 text-bespin"
-                                  }`}
-                                >
-                                  {(player.name || "NN")
-                                    .substring(0, 2)
-                                    .toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex flex-col">
-                                <div className="font-medium">
-                                  {player.name || "Unknown Player"}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  Role: {player.role || "Player"}
+                            <Link
+                              href={`/players/${player.id}`}
+                              className="hover:underline"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback
+                                    className={`${
+                                      team.name.includes("Force") ||
+                                      team.name.includes("Jedi")
+                                        ? "bg-jedi/20 text-jedi"
+                                        : team.name.includes("Sith")
+                                        ? "bg-sith/20 text-sith"
+                                        : "bg-imperial/20 text-bespin"
+                                    }`}
+                                  >
+                                    {(player.name || "NN")
+                                      .substring(0, 2)
+                                      .toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col">
+                                  <div className="font-medium">
+                                    {player.name || "Unknown Player"}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Role: {player.role || "Player"}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            </Link>
                           </TableCell>
                           <TableCell className="text-right">
                             {player.player_stats?.flag_captures || 0}
