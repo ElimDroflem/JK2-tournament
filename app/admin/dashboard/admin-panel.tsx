@@ -149,15 +149,28 @@ function ManageTeamsSection() {
 
   useEffect(() => {
     async function fetchAdminTeams() {
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
       try {
-        // Client-side fetch to an API route is preferred for client components
-        const response = await fetch("/api/admin/get-teams"); // Create this API route
-        if (!response.ok) throw new Error("Failed to fetch teams");
+        const response = await fetch("/api/admin/get-teams");
+        if (!response.ok) {
+          let errorMsg = "Failed to fetch teams";
+          try {
+            const errorData = await response.json();
+            errorMsg = errorData.error || `API error: ${response.status}`;
+          } catch (parseError) {
+            errorMsg = `Failed to fetch teams and parse error response (status: ${response.status})`;
+          }
+          throw new Error(errorMsg);
+        }
         const fetchedTeams = await response.json();
         setTeams(fetchedTeams || []);
       } catch (e: any) {
         console.error("Failed to fetch teams for admin panel:", e);
         setError(`Could not load teams: ${e.message}`);
+      } finally {
+        setIsLoading(false);
       }
     }
     fetchAdminTeams();
