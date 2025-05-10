@@ -22,7 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getTeams, type TeamWithStatsAndPlayers } from "@/lib/data-service";
+import {
+  getTeams,
+  type TeamWithStatsAndPlayers,
+  type PlayerWithStatsAndTeamName,
+} from "@/lib/data-service";
 
 // CSV Upload Form
 function CsvUploadSection() {
@@ -286,19 +290,473 @@ function ManageTeamsSection() {
 }
 
 // --- Manage Players Section (Placeholder) ---
+// function ManagePlayersSection() {
+//   return (
+//     <Card>
+//       <CardHeader>
+//         <CardTitle>Manage Players</CardTitle>
+//         <CardDescription>
+//           Manage team rosters and player assignments.
+//         </CardDescription>
+//       </CardHeader>
+//       <CardContent>
+//         <p className="text-muted-foreground">
+//           Player management features coming soon.
+//         </p>
+//       </CardContent>
+//     </Card>
+//   );
+// }
+
+// --- Manage Players Section ---
 function ManagePlayersSection() {
+  // State for teams and selected team (for managing its roster)
+  const [allTeams, setAllTeams] = useState<TeamWithStatsAndPlayers[]>([]);
+  const [selectedTeamForRosterMgmtId, setSelectedTeamForRosterMgmtId] =
+    useState<string>("");
+
+  // Derived state for the currently selected team's details
+  const selectedTeamDetails = allTeams.find(
+    (t) => t.id.toString() === selectedTeamForRosterMgmtId
+  );
+
+  // State for unassigned players
+  const [unassignedPlayers, setUnassignedPlayers] = useState<
+    PlayerWithStatsAndTeamName[]
+  >([]);
+  const [selectedUnassignedPlayerId, setSelectedUnassignedPlayerId] =
+    useState<string>("");
+
+  // State for creating a new player
+  const [newPlayerName, setNewPlayerName] = useState("");
+
+  // Common state for actions
+  const [playerMgmtApiPassword, setPlayerMgmtApiPassword] = useState("");
+  const [isLoadingData, setIsLoadingData] = useState(false); // For initial load and refresh
+  const [isSubmitting, setIsSubmitting] = useState(false); // For form submissions
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Initial data fetching for teams and unassigned players
+  useEffect(() => {
+    async function fetchData() {
+      setIsLoadingData(true);
+      setError(null);
+      setSuccessMessage(null);
+      try {
+        const [teamsRes, unassignedPlayersRes] = await Promise.all([
+          fetch("/api/admin/get-teams"),
+          fetch("/api/admin/get-unassigned-players"),
+        ]);
+
+        if (!teamsRes.ok) {
+          const err = await teamsRes.json();
+          throw new Error(err.error || "Failed to fetch teams");
+        }
+        const teamsData = await teamsRes.json();
+        setAllTeams(teamsData || []);
+
+        if (!unassignedPlayersRes.ok) {
+          const err = await unassignedPlayersRes.json();
+          throw new Error(err.error || "Failed to fetch unassigned players");
+        }
+        const unassignedData = await unassignedPlayersRes.json();
+        setUnassignedPlayers(unassignedData || []);
+      } catch (e: any) {
+        setError(`Could not load initial player/team data: ${e.message}`);
+      } finally {
+        setIsLoadingData(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  // Function to refresh teams and unassigned players data
+  const refreshAllPlayerData = async () => {
+    setIsLoadingData(true);
+    // setError(null); setSuccessMessage(null); // Keep existing success/error from the action that triggered refresh for a bit
+    try {
+      const [teamsRes, unassignedPlayersRes] = await Promise.all([
+        fetch("/api/admin/get-teams"),
+        fetch("/api/admin/get-unassigned-players"),
+      ]);
+
+      if (!teamsRes.ok)
+        throw new Error("Failed to re-fetch teams during refresh");
+      const teamsData = await teamsRes.json();
+      setAllTeams(teamsData || []);
+
+      if (!unassignedPlayersRes.ok)
+        throw new Error("Failed to re-fetch unassigned players during refresh");
+      const unassignedData = await unassignedPlayersRes.json();
+      setUnassignedPlayers(unassignedData || []);
+    } catch (e: any) {
+      // Append to existing error or set new one
+      setError((prev) =>
+        prev
+          ? `${prev}. Additionally, error refreshing data: ${e.message}`
+          : `Error refreshing data: ${e.message}`
+      );
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  const handleRemovePlayerFromTeam = async (playerIdToRemove: number) => {
+    if (!selectedTeamForRosterMgmtId || !playerMgmtApiPassword) {
+      setError(
+        "Selected team and API password are required to remove a player."
+      );
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const response = await fetch("/api/admin/update-player-team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: playerIdToRemove,
+          newTeamId: null, // Unassign
+          password: playerMgmtApiPassword,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Failed to remove player from team.");
+      setSuccessMessage(
+        result.message || "Player removed from team successfully."
+      );
+      await refreshAllPlayerData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddPlayerToTeam = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      !selectedTeamForRosterMgmtId ||
+      !selectedUnassignedPlayerId ||
+      !playerMgmtApiPassword
+    ) {
+      setError(
+        "A team to add to, an unassigned player, and the API password are required."
+      );
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const response = await fetch("/api/admin/update-player-team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: parseInt(selectedUnassignedPlayerId, 10),
+          newTeamId: parseInt(selectedTeamForRosterMgmtId, 10),
+          password: playerMgmtApiPassword,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Failed to add player to team.");
+      setSuccessMessage(result.message || "Player added to team successfully.");
+      setSelectedUnassignedPlayerId("");
+      await refreshAllPlayerData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreatePlayer = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!newPlayerName.trim() || !playerMgmtApiPassword) {
+      setError("New player name and API password are required.");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const response = await fetch("/api/admin/create-player-and-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerName: newPlayerName.trim(),
+          teamId: selectedTeamForRosterMgmtId
+            ? parseInt(selectedTeamForRosterMgmtId, 10)
+            : null,
+          password: playerMgmtApiPassword,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Failed to create player.");
+
+      let message = result.message || "Player created successfully.";
+      if (result.warning) {
+        message = `${message} WARNING: ${result.warning}`;
+      }
+      setSuccessMessage(message);
+      setNewPlayerName("");
+      await refreshAllPlayerData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Manage Players</CardTitle>
+        <CardTitle>Manage Players & Team Rosters</CardTitle>
         <CardDescription>
-          Manage team rosters and player assignments.
+          Assign players to teams, remove them, or create new players. All
+          actions in this section require the API password below.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">
-          Player management features coming soon.
-        </p>
+      <CardContent className="space-y-6">
+        {isLoadingData && (
+          <p className="text-blue-500">Loading player/team data...</p>
+        )}
+        {error && (
+          <Alert variant="destructive" className="my-4">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {successMessage && (
+          <Alert variant="default" className="my-4">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Success</AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-2 p-4 border rounded-md">
+          <Label htmlFor="playerMgmtApiPassword">
+            API Password (for Player Actions)
+          </Label>
+          <Input
+            id="playerMgmtApiPassword"
+            type="password"
+            value={playerMgmtApiPassword}
+            onChange={(e) => setPlayerMgmtApiPassword(e.target.value)}
+            placeholder="Enter API password"
+            disabled={isSubmitting}
+          />
+          <p className="text-sm text-muted-foreground">
+            This password is required for all remove, add, or create player
+            operations below.
+          </p>
+        </div>
+
+        {/* Team Roster Management */}
+        <Card className="border-2 border-dashed p-0">
+          <CardHeader>
+            <CardTitle className="text-lg">Team Roster Management</CardTitle>
+            <CardDescription>
+              Select a team to view and manage its players.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="rosterTeamSelect">Team</Label>
+              <Select
+                value={selectedTeamForRosterMgmtId}
+                onValueChange={(value) => {
+                  setSelectedTeamForRosterMgmtId(value);
+                  setError(null);
+                  setSuccessMessage(null);
+                }}
+                disabled={
+                  isLoadingData || isSubmitting || allTeams.length === 0
+                }
+              >
+                <SelectTrigger id="rosterTeamSelect">
+                  <SelectValue
+                    placeholder={
+                      allTeams.length === 0
+                        ? "Loading teams..."
+                        : "Select a team"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {allTeams.map((team) => (
+                    <SelectItem key={team.id} value={team.id.toString()}>
+                      {team.name} (ID: {team.id})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedTeamDetails && (
+              <div className="mt-4 p-4 border rounded-md bg-slate-50 dark:bg-slate-800">
+                <h4 className="font-semibold mb-2">
+                  Players in {selectedTeamDetails.name}:
+                </h4>
+                {selectedTeamDetails.players_list.length > 0 ? (
+                  <ul className="space-y-2">
+                    {selectedTeamDetails.players_list.map((player) => (
+                      <li
+                        key={player.id}
+                        className="flex justify-between items-center p-2 bg-white dark:bg-slate-700 rounded"
+                      >
+                        <span>
+                          {player.name} (ID: {player.id})
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemovePlayerFromTeam(player.id)}
+                          disabled={isSubmitting || !playerMgmtApiPassword}
+                        >
+                          Remove from Team
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">
+                    This team has no players.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Add Existing Unassigned Player to Selected Team */}
+        <Card className="border-2 border-dashed p-0">
+          <CardHeader>
+            <CardTitle className="text-lg">
+              Add Existing Player to Team
+            </CardTitle>
+            <CardDescription>
+              Select an unassigned player and add them to the currently selected
+              team above.
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleAddPlayerToTeam}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="unassignedPlayerSelect">
+                  Unassigned Player
+                </Label>
+                <Select
+                  value={selectedUnassignedPlayerId}
+                  onValueChange={setSelectedUnassignedPlayerId}
+                  disabled={
+                    isLoadingData ||
+                    isSubmitting ||
+                    unassignedPlayers.length === 0 ||
+                    !selectedTeamForRosterMgmtId
+                  }
+                >
+                  <SelectTrigger id="unassignedPlayerSelect">
+                    <SelectValue
+                      placeholder={
+                        unassignedPlayers.length === 0
+                          ? "No unassigned players"
+                          : "Select player to add"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unassignedPlayers.map((player) => (
+                      <SelectItem key={player.id} value={player.id.toString()}>
+                        {player.name} (ID: {player.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Target team:{" "}
+                  {selectedTeamDetails ? (
+                    selectedTeamDetails.name
+                  ) : (
+                    <span className="text-orange-500">
+                      No team selected above
+                    </span>
+                  )}
+                  .
+                </p>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  !selectedTeamForRosterMgmtId ||
+                  !selectedUnassignedPlayerId ||
+                  !playerMgmtApiPassword
+                }
+              >
+                {isSubmitting ? "Adding..." : "Add Player to Selected Team"}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+
+        {/* Create New Player */}
+        <Card className="border-2 border-dashed p-0">
+          <CardHeader>
+            <CardTitle className="text-lg">Create New Player</CardTitle>
+            <CardDescription>
+              Create a new player. They will be assigned to the selected team
+              above, or unassigned if no team is selected.
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleCreatePlayer}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="newPlayerNameVal">New Player Name</Label>
+                <Input
+                  id="newPlayerNameVal"
+                  type="text"
+                  value={newPlayerName}
+                  onChange={(e) => setNewPlayerName(e.target.value)}
+                  placeholder="Enter name for the new player"
+                  disabled={isSubmitting}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Assign to team:{" "}
+                  {selectedTeamDetails ? (
+                    selectedTeamDetails.name
+                  ) : (
+                    <span className="text-orange-500">
+                      Unassigned (no team selected above)
+                    </span>
+                  )}
+                  .
+                </p>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  !newPlayerName.trim() ||
+                  !playerMgmtApiPassword
+                }
+              >
+                {isSubmitting ? "Creating..." : "Create New Player"}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
       </CardContent>
     </Card>
   );

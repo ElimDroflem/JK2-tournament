@@ -31,10 +31,10 @@ export default function Footer() {
             Contact
           </Link>
           <Link
-            href="/admin/upload-player-stats"
+            href="/admin/dashboard"
             className="text-sm text-gray-300 hover:text-jkhub hover:underline"
           >
-            Admin Upload
+            Admin
           </Link>
         </div>
       </div>

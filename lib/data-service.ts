@@ -477,3 +477,55 @@ export async function getMatchById(
     return null;
   }
 }
+
+// Get unassigned players (players with team_id = null)
+export async function getUnassignedPlayers(): Promise<
+  PlayerWithStatsAndTeamName[]
+> {
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log("Supabase not configured, cannot fetch unassigned players.");
+    return [];
+  }
+
+  try {
+    const { data: playersData, error: playersError } = await client
+      .from("players")
+      .select(
+        `
+        *,\n        player_stats (*),\n        teams (name) \n      `
+      )
+      .is("team_id", null) // Filter for team_id IS NULL
+      .order("name", { ascending: true });
+
+    if (playersError) {
+      console.error(
+        "Error fetching unassigned players from Supabase:",
+        playersError.message
+      );
+      return [];
+    }
+    if (!playersData) {
+      return [];
+    }
+
+    const formattedPlayers: PlayerWithStatsAndTeamName[] = playersData.map(
+      (player) => {
+        const team = player.teams as Tables<"teams"> | null;
+        return {
+          ...player,
+          player_stats: Array.isArray(player.player_stats)
+            ? player.player_stats[0] || null
+            : player.player_stats || null,
+          team_name: team?.name || "N/A", // Should be N/A for unassigned
+          teams: undefined,
+        } as PlayerWithStatsAndTeamName;
+      }
+    );
+
+    return formattedPlayers;
+  } catch (error: any) {
+    console.error("Error in getUnassignedPlayers:", error.message);
+    return [];
+  }
+}
