@@ -794,6 +794,127 @@ function CorrectDataSection() {
   );
 }
 
+// New component for the reset stats section
+function ResetStatsSection() {
+  const [confirmationPassword, setConfirmationPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // For this specific destructive action, the client-side check should ideally align with
+  // what the backend expects for THE destructive password, not necessarily the main panel login password.
+  // The backend API for reset-all-stats uses ADMIN_DESTRUCTIVE_ACTION_PASSWORD (defaults to "samsmum_reset_all_local_default").
+  // We make the client-side check expect this default if no specific NEXT_PUBLIC_ env var is set for it.
+  const clientSideExpectedPassword =
+    process.env.NEXT_PUBLIC_ADMIN_DESTRUCTIVE_CONFIRM_PASSWORD ||
+    "samsmum_reset_all_local_default";
+
+  const handleResetStats = async () => {
+    if (confirmationPassword !== clientSideExpectedPassword) {
+      setError(
+        "Incorrect confirmation password. Please enter the main admin password to proceed."
+      );
+      setSuccessMessage(null);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/reset-all-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // The API route will validate this password against its own secure env var.
+        body: JSON.stringify({ password: confirmationPassword }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to reset stats.");
+      }
+      setSuccessMessage(
+        result.message ||
+          "All player and team stats have been reset successfully."
+      );
+      setConfirmationPassword(""); // Clear password on success
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Card className="mt-8 border-red-500 border-2 bg-red-50 dark:bg-red-900/30">
+      <CardHeader>
+        <CardTitle className="text-red-700 dark:text-red-400">
+          DANGER ZONE: Reset All Stats
+        </CardTitle>
+        <CardDescription className="text-red-600 dark:text-red-300">
+          This action is irreversible and will reset all player lifetime stats,
+          team lifetime stats, individual match performances
+          (player_match_stats), and match scores/completions to zero or their
+          initial states. Player and team records themselves will not be
+          deleted.
+          <strong>Exercise extreme caution.</strong>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {successMessage && (
+          <Alert
+            variant="default"
+            className="border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+          >
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Success</AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="resetConfirmationPassword">
+            Confirm Admin Password to Reset Stats
+          </Label>
+          <Input
+            id="resetConfirmationPassword"
+            type="password"
+            value={confirmationPassword}
+            onChange={(e) => {
+              setConfirmationPassword(e.target.value);
+              setError(null); // Clear error when user types
+            }}
+            placeholder="Enter main admin password to confirm"
+            disabled={isSubmitting}
+            className="border-red-500 focus:ring-red-500"
+          />
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button
+          variant="destructive"
+          onClick={handleResetStats}
+          disabled={
+            isSubmitting || confirmationPassword !== clientSideExpectedPassword
+          }
+        >
+          {isSubmitting
+            ? "Resetting Stats..."
+            : "Reset All Player and Team Stats Now"}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
 export default function AdminPanel() {
   const [password, setPassword] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
@@ -851,25 +972,28 @@ export default function AdminPanel() {
   }
 
   return (
-    <Tabs defaultValue="csv_upload" className="w-full">
-      <TabsList className="grid w-full grid-cols-4 mb-6">
-        <TabsTrigger value="csv_upload">CSV Upload</TabsTrigger>
-        <TabsTrigger value="manage_teams">Manage Teams</TabsTrigger>
-        <TabsTrigger value="manage_players">Manage Players</TabsTrigger>
-        <TabsTrigger value="correct_data">Correct Data</TabsTrigger>
-      </TabsList>
-      <TabsContent value="csv_upload">
-        <CsvUploadSection />
-      </TabsContent>
-      <TabsContent value="manage_teams">
-        <ManageTeamsSection />
-      </TabsContent>
-      <TabsContent value="manage_players">
-        <ManagePlayersSection />
-      </TabsContent>
-      <TabsContent value="correct_data">
-        <CorrectDataSection />
-      </TabsContent>
-    </Tabs>
+    <>
+      <Tabs defaultValue="csv_upload" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsTrigger value="csv_upload">CSV Upload</TabsTrigger>
+          <TabsTrigger value="manage_teams">Manage Teams</TabsTrigger>
+          <TabsTrigger value="manage_players">Manage Players</TabsTrigger>
+          <TabsTrigger value="correct_data">Correct Data</TabsTrigger>
+        </TabsList>
+        <TabsContent value="csv_upload">
+          <CsvUploadSection />
+        </TabsContent>
+        <TabsContent value="manage_teams">
+          <ManageTeamsSection />
+        </TabsContent>
+        <TabsContent value="manage_players">
+          <ManagePlayersSection />
+        </TabsContent>
+        <TabsContent value="correct_data">
+          <CorrectDataSection />
+        </TabsContent>
+      </Tabs>
+      <ResetStatsSection />
+    </>
   );
 }
