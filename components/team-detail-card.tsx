@@ -144,10 +144,8 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
               {players
                 .sort(
                   (a, b) =>
-                    (b.player_stats?.flag_captures || 0) +
-                    (b.player_stats?.flag_returns || 0) -
-                    ((a.player_stats?.flag_captures || 0) +
-                      (a.player_stats?.flag_returns || 0))
+                    (b.player_stats?.impact || 0) -
+                    (a.player_stats?.impact || 0)
                 )
                 .slice(0, 3)
                 .map((player) => (
@@ -174,21 +172,8 @@ export default function TeamDetailCard({ team, players }: TeamDetailCardProps) {
                         {player.name || "Unknown Player"}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        variant="outline"
-                        className="flex items-center gap-1"
-                      >
-                        <Trophy className="h-3 w-3 mr-1" />
-                        {player.player_stats?.flag_captures || 0} caps
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="flex items-center gap-1"
-                      >
-                        <Shield className="h-3 w-3 mr-1" />
-                        {player.player_stats?.flag_returns || 0} returns
-                      </Badge>
+                    <div className="text-right font-medium text-jkhub">
+                      Impact: {player.player_stats?.impact || 0}
                     </div>
                   </div>
                 ))}
