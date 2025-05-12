@@ -28,10 +28,6 @@ interface CsvPlayerStatRow {
   [key: string]: any; // For any other columns that might be present but ignored
 }
 
-// Type for player_match_stats insert, assuming supabase.ts will be updated
-// We define it locally for now to help with typings in this file.
-type PlayerMatchStatInsert = Tables<"player_match_stats">["Insert"];
-
 async function getPlayerIdAndTeamId(
   supabaseAdmin: SupabaseClient<Database>,
   playerName: string
@@ -47,28 +43,12 @@ async function getPlayerIdAndTeamId(
   return { player_id: data.id, team_id: data.team_id };
 }
 
+const supabase = createClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 export async function POST(request: NextRequest) {
-  // Check for Supabase service role key
-  if (!supabaseServiceRoleKey) {
-    console.error("Supabase service role key is not configured.");
-    return NextResponse.json(
-      { error: "Server configuration error." },
-      { status: 500 }
-    );
-  }
-
-  // Initialize Supabase client with admin privileges
-  const supabaseAdmin = createClient<Database>(
-    supabaseUrl,
-    supabaseServiceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
-
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -152,7 +132,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const playerStatsToUpsert: PlayerMatchStatInsert[] = [];
+    const playerStatsToUpsert: any[] = [];
     const missingPlayerNames: string[] = [];
     const validationErrors: string[] = [];
     const playerIdsToRecalculate = new Set<number>();
@@ -172,10 +152,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const playerInfo = await getPlayerIdAndTeamId(
-        supabaseAdmin,
-        row.player_name
-      );
+      const playerInfo = await getPlayerIdAndTeamId(supabase, row.player_name);
       if (!playerInfo) {
         if (!missingPlayerNames.includes(row.player_name)) {
           missingPlayerNames.push(row.player_name);
@@ -227,7 +204,7 @@ export async function POST(request: NextRequest) {
         overall_deaths: numericStats.overall_deaths as number,
         flaghold_time: numericStats.flaghold_time as number,
         impact: numericStats.impact as number, // Validated to be 1, 2, or 3
-      } as PlayerMatchStatInsert);
+      });
       playerIdsToRecalculate.add(playerInfo.player_id);
     }
 
@@ -252,7 +229,7 @@ export async function POST(request: NextRequest) {
     }
 
     // All validations passed, proceed with database operations
-    const { error: upsertError } = await supabaseAdmin
+    const { error: upsertError } = await supabase
       .from("player_match_stats")
       .upsert(playerStatsToUpsert, { onConflict: "match_id,player_id" });
 
@@ -265,14 +242,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate team-level aggregate stats for this match from the just-upserted player_match_stats
-    const { data: matchAggregates, error: aggregateError } = await supabaseAdmin
+    const { data: matchAggregates, error: aggregateError } = await supabase
       .from("player_match_stats")
       .select(
         `
-            players!inner(team_id),
-            overall_kills,
-            flag_returns
-        `
+          players!inner(team_id),
+          overall_kills,
+          flag_returns
+      `
       )
       .eq("match_id", matchId);
 
@@ -294,7 +271,7 @@ export async function POST(request: NextRequest) {
       teamAReturns = 0,
       teamBReturns = 0;
     // We need the team_a_id and team_b_id for the match to correctly assign these aggregates
-    const { data: matchDetails, error: matchDetailsError } = await supabaseAdmin
+    const { data: matchDetails, error: matchDetailsError } = await supabase
       .from("matches")
       .select("team_a_id, team_b_id")
       .eq("id", matchId)
@@ -324,7 +301,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Update the matches table
-    const { error: matchUpdateError } = await supabaseAdmin
+    const { error: matchUpdateError } = await supabase
       .from("matches")
       .update({
         score_a: finalScoreA,
@@ -350,7 +327,7 @@ export async function POST(request: NextRequest) {
 
     // Trigger recalculation of lifetime stats for each affected player
     for (const playerId of playerIdsToRecalculate) {
-      const { error: playerRecalcError } = await supabaseAdmin.rpc(
+      const { error: playerRecalcError } = await supabase.rpc(
         "recalculate_player_lifetime_stats",
         { p_player_id: playerId }
       );
@@ -363,7 +340,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Trigger update of team_stats (lifetime team stats)
-    const { error: teamRecalcError } = await supabaseAdmin.rpc(
+    const { error: teamRecalcError } = await supabase.rpc(
       "update_team_stats_for_match",
       { p_match_id: matchId }
     );
