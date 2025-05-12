@@ -1,89 +1,102 @@
-import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
 import type { Database } from "@/types/supabase";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-// IMPORTANT: Use a dedicated, strong password for this highly destructive action.
-// Set this in your server-side environment variables.
-const destructiveActionPassword =
-  process.env.ADMIN_DESTRUCTIVE_ACTION_PASSWORD ||
-  "samsmum_reset_all_local_default";
-
-export async function POST(request: NextRequest) {
-  if (!supabaseServiceRoleKey) {
-    console.error("Supabase service role key is not configured.");
-    return NextResponse.json(
-      { error: "Server configuration error." },
-      { status: 500 }
-    );
-  }
-
-  const supabaseAdmin = createClient<Database>(
-    supabaseUrl,
-    supabaseServiceRoleKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-
+export async function POST() {
   try {
-    const { password } = await request.json();
+    // Clean up any bad data before proceeding
+    await supabase.from("player_stats").delete().is("player_id", null);
 
-    if (!password || password !== destructiveActionPassword) {
+    // Get all player IDs first
+    const { data: players, error: playersError } = await supabase
+      .from("players")
+      .select("id");
+
+    if (playersError) {
+      console.error("Error fetching players:", playersError);
       return NextResponse.json(
-        { error: "Unauthorized: Invalid password for reset action." },
-        { status: 401 }
+        { error: "Failed to fetch players" },
+        { status: 500 }
       );
     }
 
-    // Proceed with deletions and updates
-    // 1. Delete all from player_match_stats
-    const { error: deletePlayerMatchStatsError } = await supabaseAdmin
+    // Reset player stats first
+    for (const player of players) {
+      const { error: statsError } = await supabase.from("player_stats").upsert(
+        {
+          player_id: player.id,
+          impact: 0,
+          flag_captures: 0,
+          flag_returns: 0,
+          bc_kills: 0,
+          dbs_kills: 0,
+          dfa_kills: 0,
+          overall_kills: 0,
+          overall_deaths: 0,
+          flaghold_time: 0,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "player_id" }
+      );
+
+      if (statsError) {
+        console.error(
+          `Error resetting stats for player ${player.id}:`,
+          statsError
+        );
+        return NextResponse.json(
+          { error: "Failed to reset player stats" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Delete player match stats
+    const { error: matchStatsError } = await supabase
       .from("player_match_stats")
       .delete()
-      .neq("id", -1); // Trick to delete all rows without a specific filter like eq
+      .neq("id", 0); // Delete all records
 
-    if (deletePlayerMatchStatsError) {
-      console.error(
-        "Error deleting player_match_stats:",
-        deletePlayerMatchStatsError
-      );
+    if (matchStatsError) {
+      console.error("Error deleting player match stats:", matchStatsError);
       return NextResponse.json(
-        {
-          error: `Failed to delete player_match_stats: ${deletePlayerMatchStatsError.message}`,
-        },
+        { error: "Failed to delete player match stats" },
         { status: 500 }
       );
     }
 
-    // 2. Update player_stats to reset all stat fields
-    const { error: updatePlayerStatsError } = await supabaseAdmin
-      .from("player_stats")
+    // Reset matches
+    const { error: matchesError } = await supabase
+      .from("matches")
       .update({
-        impact: 0, // Or null if appropriate based on schema and preference
-        flag_captures: 0,
-        flag_returns: 0,
-        bc_kills: 0,
-        dbs_kills: 0,
-        dfa_kills: 0,
-        overall_kills: 0,
-        overall_deaths: 0,
-        flaghold_time: 0,
+        score_a: 0,
+        score_b: 0,
+        team_a_returns: 0,
+        team_b_returns: 0,
+        team_a_kills: 0,
+        team_b_kills: 0,
+        team_a_flag_time: 0,
+        team_b_flag_time: 0,
+        is_completed: false,
+        updated_at: new Date().toISOString(),
       })
-      .neq("id", -1); // Explicitly update all rows by providing a condition that matches all
+      .neq("id", 0); // Update all records
 
-    if (updatePlayerStatsError) {
-      console.error("Error resetting player_stats:", updatePlayerStatsError);
+    if (matchesError) {
+      console.error("Error resetting matches:", matchesError);
       return NextResponse.json(
-        {
-          error: `Failed to reset player_stats: ${updatePlayerStatsError.message}`,
-        },
+        { error: "Failed to reset matches" },
         { status: 500 }
       );
     }
 
-    // 3. Update team_stats to reset all stat fields
-    const { error: updateTeamStatsError } = await supabaseAdmin
+    // Reset team stats
+    const { error: teamStatsError } = await supabase
       .from("team_stats")
       .update({
         matches_played: 0,
@@ -94,51 +107,23 @@ export async function POST(request: NextRequest) {
         flag_returns: 0,
         kills: 0,
         points: 0,
+        updated_at: new Date().toISOString(),
       })
-      .neq("id", -1); // Explicitly update all rows
+      .neq("id", 0); // Update all records
 
-    if (updateTeamStatsError) {
-      console.error("Error resetting team_stats:", updateTeamStatsError);
+    if (teamStatsError) {
+      console.error("Error resetting team stats:", teamStatsError);
       return NextResponse.json(
-        {
-          error: `Failed to reset team_stats: ${updateTeamStatsError.message}`,
-        },
+        { error: "Failed to reset team stats" },
         { status: 500 }
       );
     }
 
-    // 4. Update matches table
-    const { error: updateMatchesError } = await supabaseAdmin
-      .from("matches")
-      .update({
-        score_a: 0,
-        score_b: 0,
-        team_a_returns: 0,
-        team_b_returns: 0,
-        team_a_kills: 0,
-        team_b_kills: 0,
-        team_a_flag_time: 0, // Assuming these are nullable or default to 0
-        team_b_flag_time: 0, // Assuming these are nullable or default to 0
-        is_completed: false,
-      })
-      .neq("id", -1); // Explicitly update all rows
-
-    if (updateMatchesError) {
-      console.error("Error resetting matches:", updateMatchesError);
-      return NextResponse.json(
-        { error: `Failed to reset matches: ${updateMatchesError.message}` },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      message:
-        "All player stats, team stats, match performances, and match results have been reset.",
-    });
-  } catch (error: any) {
-    console.error("API Error in reset-all-stats:", error);
+    return NextResponse.json({ message: "All stats reset successfully" });
+  } catch (error) {
+    console.error("Unexpected error:", error);
     return NextResponse.json(
-      { error: error.message || "An unexpected error occurred." },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

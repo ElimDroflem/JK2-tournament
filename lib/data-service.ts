@@ -7,6 +7,7 @@ import {
 } from "./data";
 import type { Database, Tables, Enums } from "@/types/supabase";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 // Define more specific types for what our service functions will return
 // These can be adjusted based on exact frontend needs
@@ -33,19 +34,27 @@ export interface MatchWithTeamNames extends Match {
   order?: number;
 }
 
-// Cache for data - use more specific types for cache
+// Cache management
 let teamsCache: TeamWithStatsAndPlayers[] | null = null;
 let playersCache: PlayerWithStatsAndTeamName[] | null = null;
 let matchHistoryCache: MatchWithTeamNames[] | null = null;
 let upcomingMatchesCache: MatchWithTeamNames[] | null = null; // Upcoming matches will also have team names
+let lastCacheUpdate = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Reset the cache
+// Helper to check if cache is stale
+function isCacheStale() {
+  return Date.now() - lastCacheUpdate > CACHE_TTL;
+}
+
+// Reset cache
 export function resetCache() {
   console.log("Resetting data cache...");
   teamsCache = null;
   playersCache = null;
   matchHistoryCache = null;
   upcomingMatchesCache = null;
+  lastCacheUpdate = 0;
 }
 
 // Helper to get Supabase client, ensuring it's configured
@@ -56,19 +65,16 @@ function getSupabaseClient(): SupabaseClient<Database> | null {
   return supabase as SupabaseClient<Database>;
 }
 
-// Get teams data
+// Get teams data with real-time updates
 export async function getTeams(): Promise<TeamWithStatsAndPlayers[]> {
-  if (teamsCache) {
+  if (teamsCache && !isCacheStale()) {
     return teamsCache;
   }
 
   const client = getSupabaseClient();
   if (!client) {
-    console.log(
-      "Supabase not configured, using static data for teams (if available and shaped correctly)"
-    );
-    // TODO: Adjust staticTeams structure or provide a mapping function if used as fallback
-    return staticTeams as any; // Cast as any for now, ideally static data matches TeamWithStatsAndPlayers
+    console.log("Supabase not configured, using static data for teams");
+    return staticTeams as any;
   }
 
   try {
@@ -78,48 +84,52 @@ export async function getTeams(): Promise<TeamWithStatsAndPlayers[]> {
         `
         *,
         team_stats (*),
-        players (id, name)
+        players_list:players (
+          id,
+          name,
+          role,
+          player_stats (*)
+        )
       `
       )
       .order("name", { ascending: true });
 
     if (teamsError) {
       console.error("Error fetching teams from Supabase:", teamsError.message);
-      return staticTeams as any; // Fallback
+      return staticTeams as any;
     }
 
     if (!teamsData) {
       return [];
     }
 
-    const formattedTeams: TeamWithStatsAndPlayers[] = teamsData.map((team) => ({
+    const formattedTeams = teamsData.map((team) => ({
       ...team,
       team_stats: Array.isArray(team.team_stats)
         ? team.team_stats[0] || null
-        : team.team_stats || null, // Supabase might return array for one-to-one if not unique
-      players_list: team.players || [],
+        : team.team_stats || null,
+      players_list: team.players_list || [],
     }));
 
     teamsCache = formattedTeams;
+    lastCacheUpdate = Date.now();
     return formattedTeams;
   } catch (error: any) {
     console.error("Error in getTeams:", error.message);
-    return staticTeams as any; // Fallback
+    return staticTeams as any;
   }
 }
 
-// Get players data
+// Get players data with real-time updates
 export async function getPlayers(): Promise<PlayerWithStatsAndTeamName[]> {
-  if (playersCache) {
+  if (playersCache && !isCacheStale()) {
     return playersCache;
   }
 
   const client = getSupabaseClient();
   if (!client) {
-    console.log(
-      "Supabase not configured, using static data for players (if available and shaped correctly)"
-    );
-    return staticPlayers as any; // Cast as any, ideally static data matches PlayerWithStatsAndTeamName
+    console.log("Supabase not configured, using static data for players");
+    return staticPlayers as any;
   }
 
   try {
@@ -139,31 +149,31 @@ export async function getPlayers(): Promise<PlayerWithStatsAndTeamName[]> {
         "Error fetching players from Supabase:",
         playersError.message
       );
-      return staticPlayers as any; // Fallback
+      return staticPlayers as any;
     }
+
     if (!playersData) {
       return [];
     }
 
-    const formattedPlayers: PlayerWithStatsAndTeamName[] = playersData.map(
-      (player) => {
-        const team = player.teams as Tables<"teams"> | null;
-        return {
-          ...player,
-          player_stats: Array.isArray(player.player_stats)
-            ? player.player_stats[0] || null
-            : player.player_stats || null,
-          team_name: team?.name || "N/A",
-          teams: undefined, // Remove the nested 'teams' object after extracting name
-        } as PlayerWithStatsAndTeamName;
-      }
-    );
+    const formattedPlayers = playersData.map((player) => {
+      const team = player.teams as Tables<"teams"> | null;
+      return {
+        ...player,
+        player_stats: Array.isArray(player.player_stats)
+          ? player.player_stats[0] || null
+          : player.player_stats || null,
+        team_name: team?.name || "N/A",
+        teams: undefined,
+      };
+    });
 
     playersCache = formattedPlayers;
+    lastCacheUpdate = Date.now();
     return formattedPlayers;
   } catch (error: any) {
     console.error("Error in getPlayers:", error.message);
-    return staticPlayers as any; // Fallback
+    return staticPlayers as any;
   }
 }
 
@@ -527,4 +537,47 @@ export async function getUnassignedPlayers(): Promise<
     console.error("Error in getUnassignedPlayers:", error.message);
     return [];
   }
+}
+
+// Subscribe to real-time updates
+export function subscribeToUpdates(
+  onTeamsUpdate: (teams: TeamWithStatsAndPlayers[]) => void,
+  onPlayersUpdate: (players: PlayerWithStatsAndTeamName[]) => void
+) {
+  const client = getSupabaseClient();
+  if (!client) return;
+
+  // Subscribe to team_stats changes
+  client
+    .channel("team_stats_changes")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "team_stats",
+      },
+      async () => {
+        const teams = await getTeams();
+        onTeamsUpdate(teams);
+      }
+    )
+    .subscribe();
+
+  // Subscribe to player_stats changes
+  client
+    .channel("player_stats_changes")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "player_stats",
+      },
+      async () => {
+        const players = await getPlayers();
+        onPlayersUpdate(players);
+      }
+    )
+    .subscribe();
 }

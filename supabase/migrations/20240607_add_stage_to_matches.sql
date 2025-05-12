@@ -1,1 +1,1 @@
-alter table matches add column stage text not null default 'group'; 
+-- alter table matches add column stage text not null default 'group'; 

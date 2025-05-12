@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import Papa from "papaparse";
 import type { Database, Tables } from "@/types/supabase";
+import { revalidatePath } from "next/cache";
 
 // IMPORTANT: Use environment variables for Supabase credentials
 // Ensure these are set in your Vercel/deployment environment
@@ -358,7 +359,6 @@ export async function POST(request: NextRequest) {
           `Error recalculating lifetime stats for player ${playerId}:`,
           playerRecalcError
         );
-        // Non-fatal for the CSV upload, but should be logged/monitored
       }
     }
 
@@ -372,16 +372,21 @@ export async function POST(request: NextRequest) {
         `Error updating team_stats for match ${matchId}:`,
         teamRecalcError
       );
-      // Non-fatal for the CSV upload
     }
+
+    // Revalidate all relevant paths
+    revalidatePath("/leaderboards");
+    revalidatePath("/teams");
+    revalidatePath("/players");
+    revalidatePath(`/matches/${matchId}`);
 
     return NextResponse.json({
       message: `CSV '${file.name}' processed successfully for match ID ${matchId}. ${playerStatsToUpsert.length} players updated.`,
     });
   } catch (error: any) {
-    console.error("API Error in process-player-stats-csv:", error);
+    console.error("Error processing CSV:", error);
     return NextResponse.json(
-      { error: error.message || "An unexpected error occurred." },
+      { error: `Failed to process CSV: ${error.message}` },
       { status: 500 }
     );
   }

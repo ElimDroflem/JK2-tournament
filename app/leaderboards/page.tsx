@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -10,14 +13,46 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Trophy, Users } from "lucide-react";
-import { getTeams, getPlayers } from "@/lib/data-service";
+import { getTeams, getPlayers, subscribeToUpdates } from "@/lib/data-service";
+import type {
+  TeamWithStatsAndPlayers,
+  PlayerWithStatsAndTeamName,
+} from "@/lib/data-service";
 import DataStatus from "@/components/data-status";
 import Link from "next/link";
 
-export default async function LeaderboardsPage() {
-  // Fetch teams and players from Supabase
-  const teams = await getTeams();
-  const players = await getPlayers();
+export default function LeaderboardsPage() {
+  const [teams, setTeams] = useState<TeamWithStatsAndPlayers[]>([]);
+  const [players, setPlayers] = useState<PlayerWithStatsAndTeamName[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const [teamsData, playersData] = await Promise.all([
+          getTeams(),
+          getPlayers(),
+        ]);
+        setTeams(teamsData);
+        setPlayers(playersData);
+      } catch (error) {
+        console.error("Error loading leaderboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadData();
+
+    // Subscribe to real-time updates
+    subscribeToUpdates(
+      (updatedTeams) => setTeams(updatedTeams),
+      (updatedPlayers) => setPlayers(updatedPlayers)
+    );
+
+    // No need to return cleanup function since subscribeToUpdates doesn't return anything
+  }, []);
 
   // Sort teams by points (descending)
   const sortedTeams = [...teams].sort(
@@ -29,11 +64,23 @@ export default async function LeaderboardsPage() {
     (a, b) => (b.player_stats?.impact || 0) - (a.player_stats?.impact || 0)
   );
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container py-10">
+    <div className="container mx-auto py-8">
       <div className="flex flex-col items-start gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Leaderboards</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Tournament Leaderboards
+          </h1>
           <p className="text-muted-foreground">
             View team and player rankings for the JK2 CTF Tournament.
           </p>
@@ -41,15 +88,15 @@ export default async function LeaderboardsPage() {
         <DataStatus />
       </div>
 
-      <Tabs defaultValue="teams">
-        <TabsList className="grid w-full max-w-md grid-cols-2 mb-8">
-          <TabsTrigger value="teams" className="flex items-center">
+      <Tabs defaultValue="teams" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="teams">
             <Shield className="mr-2 h-4 w-4" />
-            Team Rankings
+            Teams
           </TabsTrigger>
-          <TabsTrigger value="players" className="flex items-center">
+          <TabsTrigger value="players">
             <Users className="mr-2 h-4 w-4" />
-            Player Rankings
+            Players
           </TabsTrigger>
         </TabsList>
         <TabsContent value="teams">
@@ -59,7 +106,7 @@ export default async function LeaderboardsPage() {
                 <TableRow>
                   <TableHead className="w-12">Rank</TableHead>
                   <TableHead>Team</TableHead>
-                  <TableHead className="text-right">P</TableHead>
+                  <TableHead className="text-right">Matches</TableHead>
                   <TableHead className="text-right">W</TableHead>
                   <TableHead className="text-right">D</TableHead>
                   <TableHead className="text-right">L</TableHead>
@@ -83,15 +130,19 @@ export default async function LeaderboardsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center">
-                        <Shield className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <span className="font-medium">{team.name}</span>
-                        {index < 3 && (
-                          <Badge variant="outline" className="ml-2">
-                            {index === 0 ? "1st" : index === 1 ? "2nd" : "3rd"}
-                          </Badge>
-                        )}
-                      </div>
+                      <Link
+                        href={`/teams/${team.id}`}
+                        className="hover:underline"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback>
+                              {team.name.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="font-medium">{team.name}</div>
+                        </div>
+                      </Link>
                     </TableCell>
                     <TableCell className="text-right">
                       {team.team_stats?.matches_played || 0}

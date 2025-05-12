@@ -19,11 +19,8 @@ BEGIN
         overall_kills = COALESCE(agg.total_overall_kills, 0),
         overall_deaths = COALESCE(agg.total_overall_deaths, 0),
         flaghold_time = COALESCE(agg.total_flaghold_time, 0),
-        impact = (
-            SELECT COALESCE(ROUND(AVG(pms_impact.impact))::integer, 0)
-            FROM public.player_match_stats pms_impact
-            WHERE pms_impact.player_id = ps.player_id
-        )
+        impact = COALESCE(agg.avg_impact, 0),
+        updated_at = NOW()
     FROM (
         SELECT
             player_id,
@@ -34,16 +31,30 @@ BEGIN
             SUM(dfa_kills) AS total_dfa_kills,
             SUM(overall_kills) AS total_overall_kills,
             SUM(overall_deaths) AS total_overall_deaths,
-            SUM(flaghold_time) AS total_flaghold_time
+            SUM(flaghold_time) AS total_flaghold_time,
+            ROUND(AVG(impact))::integer AS avg_impact
         FROM public.player_match_stats
         WHERE player_id = p_player_id
         GROUP BY player_id
     ) AS agg
-    WHERE ps.player_id = p_player_id AND agg.player_id = ps.player_id;
-    -- Removed the problematic GROUP BY from the outer UPDATE statement
+    WHERE ps.player_id = p_player_id;
 
-    -- If player_stats.impact should be an overall manually set value and not derived from player_match_stats.impact,
-    -- then the impact field update should be removed from this function.
+    -- If no match stats exist for this player, reset all stats to 0
+    IF NOT EXISTS (SELECT 1 FROM public.player_match_stats WHERE player_id = p_player_id) THEN
+        UPDATE public.player_stats
+        SET
+            flag_captures = 0,
+            flag_returns = 0,
+            bc_kills = 0,
+            dbs_kills = 0,
+            dfa_kills = 0,
+            overall_kills = 0,
+            overall_deaths = 0,
+            flaghold_time = 0,
+            impact = 0,
+            updated_at = NOW()
+        WHERE player_id = p_player_id;
+    END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
