@@ -30,6 +30,7 @@ export interface PlayerWithStatsAndTeamName extends Player {
 export interface MatchWithTeamNames extends Match {
   team_a_name: string | null;
   team_b_name: string | null;
+  order?: number;
 }
 
 // Cache for data - use more specific types for cache
@@ -188,8 +189,7 @@ export async function getMatchHistory(): Promise<MatchWithTeamNames[]> {
       `
       )
       .eq("is_completed", true)
-      .order("date", { ascending: false })
-      .order("time", { ascending: false });
+      .order("order", { ascending: true });
 
     if (matchesError) {
       console.error(
@@ -239,8 +239,7 @@ export async function getUpcomingMatches(): Promise<MatchWithTeamNames[]> {
       `
       )
       .eq("is_completed", false)
-      .order("date", { ascending: true })
-      .order("time", { ascending: true });
+      .order("order", { ascending: true });
 
     if (matchesError) {
       console.error(

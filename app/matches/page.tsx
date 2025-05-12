@@ -1,26 +1,35 @@
-import Link from "next/link"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { CalendarIcon, Clock } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { getMatchHistory, getUpcomingMatches } from "@/lib/data-service"
+import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { CalendarIcon, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getMatchHistory, getUpcomingMatches } from "@/lib/data-service";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export default async function MatchesPage() {
   // Fetch match data from Supabase
-  const matchHistory = await getMatchHistory()
-  const upcomingMatches = await getUpcomingMatches()
+  const matchHistory = await getMatchHistory();
+  const upcomingMatches = await getUpcomingMatches();
 
   return (
     <div className="container py-10">
       <div className="flex flex-col items-start gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Matches</h1>
-          <p className="text-muted-foreground">View all matches in the JK2 CTF Tournament.</p>
+          <p className="text-muted-foreground">
+            View all matches in the JK2 CTF Tournament.
+          </p>
         </div>
       </div>
 
@@ -42,21 +51,19 @@ export default async function MatchesPage() {
                             variant="outline"
                             className={cn(
                               "capitalize",
-                              match.round.toLowerCase().includes("final") && "bg-yellow-500/10 text-yellow-500",
+                              match.round.toLowerCase().includes("final") &&
+                                "bg-yellow-500/10 text-yellow-500"
                             )}
                           >
                             {match.round}
                           </Badge>
-                          <span className="text-sm text-muted-foreground">Match #{match.id}</span>
+                          <span className="text-sm text-muted-foreground">
+                            Match #{match.order || match.id}
+                          </span>
                         </div>
                         <div className="text-xl font-semibold">
-                          {match.teamA} vs {match.teamB}
-                        </div>
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <CalendarIcon className="mr-1 h-3 w-3" />
-                          {match.date}
-                          <Clock className="ml-3 mr-1 h-3 w-3" />
-                          {match.time}
+                          {match.team_a_name || "TBD"} vs{" "}
+                          {match.team_b_name || "TBD"}
                         </div>
                       </div>
                       <Button variant="outline" className="w-full">
@@ -77,7 +84,6 @@ export default async function MatchesPage() {
                   <TableHead>Match</TableHead>
                   <TableHead>Teams</TableHead>
                   <TableHead>Score</TableHead>
-                  <TableHead>Date</TableHead>
                   <TableHead className="text-right">Details</TableHead>
                 </TableRow>
               </TableHeader>
@@ -90,27 +96,26 @@ export default async function MatchesPage() {
                           variant="outline"
                           className={cn(
                             "capitalize",
-                            match.round.toLowerCase().includes("final") && "bg-yellow-500/10 text-yellow-500",
+                            match.round.toLowerCase().includes("final") &&
+                              "bg-yellow-500/10 text-yellow-500"
                           )}
                         >
                           {match.round}
                         </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          Match #{match.order || match.id}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">
-                        {match.teamA} vs {match.teamB}
+                        {match.team_a_name || "TBD"} vs{" "}
+                        {match.team_b_name || "TBD"}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">
-                        {match.scoreA} - {match.scoreB}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>{match.date}</span>
+                        {match.score_a ?? 0} - {match.score_b ?? 0}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -128,5 +133,5 @@ export default async function MatchesPage() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

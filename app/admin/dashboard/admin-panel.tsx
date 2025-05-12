@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, useEffect } from "react"; // Added useEffect
+import { useState, type FormEvent, useEffect, useCallback } from "react"; // Added useEffect and useCallback
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -915,6 +915,124 @@ function ResetStatsSection() {
   );
 }
 
+// --- Tournament Structure Section ---
+function TournamentStructureSection() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [fixtures, setFixtures] = useState<any[]>([]);
+  const [matchesExist, setMatchesExist] = useState(false);
+
+  // Check if matches already exist
+  useEffect(() => {
+    async function checkMatches() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/admin/check-matches-exist");
+        if (!res.ok) throw new Error("Failed to check matches");
+        const data = await res.json();
+        setMatchesExist(data.matchesExist);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    checkMatches();
+  }, []);
+
+  const handleRandomise = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+    setFixtures([]);
+    try {
+      const res = await fetch("/api/admin/generate-tournament", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate fixtures");
+      setFixtures(data.fixtures || []);
+      setSuccessMessage("Tournament fixtures generated successfully!");
+      setMatchesExist(true);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return (
+    <Card className="mb-8">
+      <CardHeader>
+        <CardTitle>Tournament Structure</CardTitle>
+        <CardDescription>
+          Randomly generate all group stage, semi-final, and final fixtures.
+          This can only be done once per tournament.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {successMessage && (
+          <Alert variant="default">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Success</AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+        <Button
+          onClick={handleRandomise}
+          disabled={isLoading || matchesExist}
+          className="mb-4"
+        >
+          {isLoading ? "Generating..." : "Randomise & Generate Fixtures"}
+        </Button>
+        {matchesExist && !fixtures.length && (
+          <p className="text-orange-600">
+            Tournament fixtures already exist. Reset all matches to
+            re-randomise.
+          </p>
+        )}
+        {fixtures.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm border">
+              <thead>
+                <tr>
+                  <th className="border px-2 py-1">Stage</th>
+                  <th className="border px-2 py-1">Round</th>
+                  <th className="border px-2 py-1">Team A</th>
+                  <th className="border px-2 py-1">Team B</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fixtures.map((f, idx) => (
+                  <tr key={idx}>
+                    <td className="border px-2 py-1">{f.stage}</td>
+                    <td className="border px-2 py-1">{f.round}</td>
+                    <td className="border px-2 py-1">
+                      {f.team_a_name || f.team_a_id}
+                    </td>
+                    <td className="border px-2 py-1">
+                      {f.team_b_name || f.team_b_id}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPanel() {
   const [password, setPassword] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
@@ -973,6 +1091,7 @@ export default function AdminPanel() {
 
   return (
     <>
+      <TournamentStructureSection />
       <Tabs defaultValue="csv_upload" className="w-full">
         <TabsList className="grid w-full grid-cols-4 mb-6">
           <TabsTrigger value="csv_upload">CSV Upload</TabsTrigger>
